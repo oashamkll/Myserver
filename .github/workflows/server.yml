@@ -8,6 +8,9 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   run-server:
     runs-on: ubuntu-latest
@@ -43,19 +46,22 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y ngrok
           ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
 
-      - name: 🚀 Start Server & Push URL to Repo
+      - name: 🚀 Start Server + Ngrok + Push URL
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPO: ${{ github.repository }}
         run: |
           # Start web server
-          python server.py &
+          python server.py > /tmp/server.log 2>&1 &
+          echo "Server PID: $!"
           sleep 3
 
-          # Start ngrok
-          ngrok http 8080 --log=stdout &
-          sleep 8
+          # Start ngrok tunnel
+          ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1 &
+          echo "Ngrok PID: $!"
+          sleep 10
 
-          # Get public URL
+          # Get public URL from ngrok API
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
           import sys, json
           try:
@@ -64,34 +70,48 @@ jobs:
                   if t.get('proto') == 'https':
                       print(t['public_url'])
                       break
-          except: pass
+          except Exception as e:
+              print('ERROR: ' + str(e), file=sys.stderr)
           ")
 
-          echo "🔗 PUBLIC URL: $PUBLIC_URL"
-
-          # Push URL to repo file so we can read it via API
-          git config user.email "myserver@github.com"
-          git config user.name "MyServer Bot"
-
-          echo "$PUBLIC_URL" > SERVER_URL.txt
-          echo "Started at: $(date)" >> SERVER_URL.txt
-
-          git add SERVER_URL.txt
-          git commit -m "🔗 Server URL: $PUBLIC_URL"
-          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "❌ Could not get ngrok URL!"
+            echo "Ngrok log:"
+            cat /tmp/ngrok.log
+            echo "Server log:"
+            cat /tmp/server.log
+            exit 1
+          fi
 
           echo ""
-          echo "╔══════════════════════════════════════════╗"
-          echo "║        🖥️  MyServer is LIVE!             ║"
-          echo "╠══════════════════════════════════════════╣"
+          echo "╔══════════════════════════════════════════════╗"
+          echo "║         🖥️  MyServer is LIVE!               ║"
+          echo "╠══════════════════════════════════════════════╣"
           echo "║  🔗 URL: $PUBLIC_URL"
-          echo "╚══════════════════════════════════════════╝"
+          echo "╚══════════════════════════════════════════════╝"
+          echo ""
 
-          # Write to summary
-          echo "## 🖥️ MyServer is LIVE!" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔗 [$PUBLIC_URL]($PUBLIC_URL)" >> $GITHUB_STEP_SUMMARY
+          # Push URL to repo so it's accessible via API
+          git config user.email "myserver-bot@users.noreply.github.com"
+          git config user.name "MyServer Bot"
+          git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git
 
-      - name: ⏳ Keep Alive (up to 6h)
-        run: |
-          echo "✅ Server is running! Keeping alive for up to 6 hours..."
-          sleep 21600
+          echo "$PUBLIC_URL" > SERVER_URL.txt
+          echo "Started: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> SERVER_URL.txt
+
+          git add SERVER_URL.txt
+          git commit -m "🔗 Live URL: $PUBLIC_URL"
+          git push origin HEAD:main
+
+          echo "✅ URL saved to repo!"
+
+          # Keep alive for 6 hours
+          echo "⏳ Keeping server alive..."
+          sleep 21500
+
+          # Cleanup
+          echo "" > SERVER_URL.txt
+          echo "offline" >> SERVER_URL.txt
+          git add SERVER_URL.txt
+          git commit -m "🔴 Server offline"
+          git push origin HEAD:main || true
