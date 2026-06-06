@@ -254,7 +254,9 @@ HTML = """<!DOCTYPE html>
 clients = {}
 
 async def handle_index(request):
-    return web.Response(text=HTML, content_type='text/html')
+    return web.Response(text=HTML, content_type='text/html', headers={
+        'ngrok-skip-browser-warning': '1'
+    })
 
 async def handle_upload(request):
     try:
