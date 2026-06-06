@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ngrok_token:
-        description: 'Ngrok Auth Token (get at dashboard.ngrok.com)'
+        description: 'Ngrok Auth Token'
         required: true
         type: string
 
@@ -26,20 +26,31 @@ jobs:
           python-version: '3.11'
 
       - name: 📦 Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install aiohttp
 
-      - name: 🛠️ Install useful tools
+      - name: 🔓 Give runner full sudo (passwordless root)
+        run: |
+          echo "runner ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/runner
+          # Make runner able to use sudo without password for everything
+          sudo chmod 0440 /etc/sudoers.d/runner
+
+      - name: 🛠️ Pre-install common tools as root
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            curl wget git vim nano htop \
-            python3 python3-pip nodejs npm \
-            ffmpeg imagemagick \
-            zip unzip tar \
-            netcat-openbsd nmap \
-            jq build-essential
+            curl wget git vim nano htop net-tools \
+            python3 python3-pip python3-venv \
+            nodejs npm \
+            ffmpeg \
+            zip unzip tar gzip \
+            nmap netcat-openbsd \
+            jq bc \
+            build-essential gcc g++ make \
+            sqlite3 \
+            screen tmux \
+            lsof tree
 
-      - name: 🌐 Install & Setup Ngrok
+      - name: 🌐 Install Ngrok
         run: |
           curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
@@ -51,17 +62,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          # Start web server
-          python server.py > /tmp/server.log 2>&1 &
-          echo "Server PID: $!"
-          sleep 3
+          # Copy server to /root and run it from there
+          sudo cp server.py /root/server.py
+          sudo pip install aiohttp -q
 
-          # Start ngrok tunnel
+          # Run server as ROOT so all commands inside shell run as root
+          sudo bash -c 'cd /root && python3 /root/server.py > /tmp/server.log 2>&1' &
+          sleep 4
+
+          # Start ngrok
           ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1 &
-          echo "Ngrok PID: $!"
           sleep 10
 
-          # Get public URL from ngrok API
+          # Get URL
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
           import sys, json
           try:
@@ -70,48 +83,32 @@ jobs:
                   if t.get('proto') == 'https':
                       print(t['public_url'])
                       break
-          except Exception as e:
-              print('ERROR: ' + str(e), file=sys.stderr)
+          except: pass
           ")
 
           if [ -z "$PUBLIC_URL" ]; then
-            echo "❌ Could not get ngrok URL!"
-            echo "Ngrok log:"
+            echo "❌ No ngrok URL!"
             cat /tmp/ngrok.log
-            echo "Server log:"
             cat /tmp/server.log
             exit 1
           fi
 
           echo ""
-          echo "╔══════════════════════════════════════════════╗"
-          echo "║         🖥️  MyServer is LIVE!               ║"
-          echo "╠══════════════════════════════════════════════╣"
-          echo "║  🔗 URL: $PUBLIC_URL"
-          echo "╚══════════════════════════════════════════════╝"
-          echo ""
+          echo "╔══════════════════════════════════════════╗"
+          echo "║       🖥️  MyServer is LIVE!              ║"
+          echo "╠══════════════════════════════════════════╣"
+          echo "║  🔗 $PUBLIC_URL"
+          echo "╚══════════════════════════════════════════╝"
 
-          # Push URL to repo so it's accessible via API
-          git config user.email "myserver-bot@users.noreply.github.com"
+          # Save URL to repo
+          git config user.email "bot@myserver.dev"
           git config user.name "MyServer Bot"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git
-
           echo "$PUBLIC_URL" > SERVER_URL.txt
           echo "Started: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> SERVER_URL.txt
-
           git add SERVER_URL.txt
-          git commit -m "🔗 Live URL: $PUBLIC_URL"
+          git commit -m "🔗 Live: $PUBLIC_URL"
           git push origin HEAD:main
 
-          echo "✅ URL saved to repo!"
-
-          # Keep alive for 6 hours
-          echo "⏳ Keeping server alive..."
+          # Keep alive
           sleep 21500
-
-          # Cleanup
-          echo "" > SERVER_URL.txt
-          echo "offline" >> SERVER_URL.txt
-          git add SERVER_URL.txt
-          git commit -m "🔴 Server offline"
-          git push origin HEAD:main || true
