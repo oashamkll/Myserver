@@ -1,0 +1,84 @@
+name: 🖥️ MyServer — Linux Web Shell
+
+on:
+  workflow_dispatch:
+    inputs:
+      ngrok_token:
+        description: 'Ngrok Auth Token (get at dashboard.ngrok.com)'
+        required: true
+        type: string
+
+jobs:
+  run-server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: 🛠️ Install useful tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            curl wget git vim nano htop \
+            python3 python3-pip nodejs npm \
+            ffmpeg imagemagick \
+            zip unzip tar \
+            netcat-openbsd nmap \
+            jq build-essential
+
+      - name: 🌐 Install & Setup Ngrok
+        run: |
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          sudo apt-get update -qq && sudo apt-get install -y ngrok
+          ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
+
+      - name: 🚀 Start Server & Ngrok
+        run: |
+          # Start the web server in background
+          python server.py &
+          SERVER_PID=$!
+          
+          # Wait for server to start
+          sleep 3
+          
+          # Start ngrok tunnel
+          ngrok http 8080 --log=stdout &
+          NGROK_PID=$!
+          
+          # Wait for ngrok to establish tunnel
+          sleep 5
+          
+          # Get public URL
+          PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
+          import sys, json
+          data = json.load(sys.stdin)
+          tunnels = data.get('tunnels', [])
+          for t in tunnels:
+              if t.get('proto') == 'https':
+                  print(t['public_url'])
+                  break
+          ")
+          
+          echo ""
+          echo "╔══════════════════════════════════════════╗"
+          echo "║        🖥️  MyServer is LIVE!             ║"
+          echo "╠══════════════════════════════════════════╣"
+          echo "║  URL: $PUBLIC_URL"
+          echo "╚══════════════════════════════════════════╝"
+          echo ""
+          echo "🔗 Open this URL in your browser to access the Linux shell!"
+          
+          # Keep alive
+          wait $SERVER_PID
