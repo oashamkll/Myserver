@@ -43,17 +43,19 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y ngrok
           ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
 
-      - name: 🔗 Get Ngrok URL & Write to Summary
+      - name: 🚀 Start Server & Push URL to Repo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Start web server
           python server.py &
           sleep 3
 
           # Start ngrok
-          ngrok http 8080 --log=stdout --log-format=json > /tmp/ngrok.log 2>&1 &
+          ngrok http 8080 --log=stdout &
           sleep 8
 
-          # Extract URL
+          # Get public URL
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
           import sys, json
           try:
@@ -65,19 +67,18 @@ jobs:
           except: pass
           ")
 
-          echo "PUBLIC_URL=$PUBLIC_URL" >> $GITHUB_ENV
+          echo "🔗 PUBLIC URL: $PUBLIC_URL"
 
-          # Write to Step Summary (readable via API!)
-          cat >> $GITHUB_STEP_SUMMARY << EOF
-          # 🖥️ MyServer is LIVE!
+          # Push URL to repo file so we can read it via API
+          git config user.email "myserver@github.com"
+          git config user.name "MyServer Bot"
 
-          ## 🔗 Your URL:
-          ## [$PUBLIC_URL]($PUBLIC_URL)
+          echo "$PUBLIC_URL" > SERVER_URL.txt
+          echo "Started at: $(date)" >> SERVER_URL.txt
 
-          Open this link in your browser to access the Ubuntu Linux shell!
-
-          > ⏱️ Session lasts up to 6 hours
-          EOF
+          git add SERVER_URL.txt
+          git commit -m "🔗 Server URL: $PUBLIC_URL"
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git HEAD:main
 
           echo ""
           echo "╔══════════════════════════════════════════╗"
@@ -86,8 +87,11 @@ jobs:
           echo "║  🔗 URL: $PUBLIC_URL"
           echo "╚══════════════════════════════════════════╝"
 
+          # Write to summary
+          echo "## 🖥️ MyServer is LIVE!" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 [$PUBLIC_URL]($PUBLIC_URL)" >> $GITHUB_STEP_SUMMARY
+
       - name: ⏳ Keep Alive (up to 6h)
         run: |
-          echo "Server is running at: $PUBLIC_URL"
-          echo "Keeping alive..."
+          echo "✅ Server is running! Keeping alive for up to 6 hours..."
           sleep 21600
