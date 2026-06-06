@@ -23,8 +23,7 @@ jobs:
           python-version: '3.11'
 
       - name: 📦 Install dependencies
-        run: |
-          pip install -r requirements.txt
+        run: pip install -r requirements.txt
 
       - name: 🛠️ Install useful tools
         run: |
@@ -44,41 +43,51 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y ngrok
           ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
 
-      - name: 🚀 Start Server & Ngrok
+      - name: 🔗 Get Ngrok URL & Write to Summary
         run: |
-          # Start the web server in background
+          # Start web server
           python server.py &
-          SERVER_PID=$!
-          
-          # Wait for server to start
           sleep 3
-          
-          # Start ngrok tunnel
-          ngrok http 8080 --log=stdout &
-          NGROK_PID=$!
-          
-          # Wait for ngrok to establish tunnel
-          sleep 5
-          
-          # Get public URL
+
+          # Start ngrok
+          ngrok http 8080 --log=stdout --log-format=json > /tmp/ngrok.log 2>&1 &
+          sleep 8
+
+          # Extract URL
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
           import sys, json
-          data = json.load(sys.stdin)
-          tunnels = data.get('tunnels', [])
-          for t in tunnels:
-              if t.get('proto') == 'https':
-                  print(t['public_url'])
-                  break
+          try:
+              data = json.load(sys.stdin)
+              for t in data.get('tunnels', []):
+                  if t.get('proto') == 'https':
+                      print(t['public_url'])
+                      break
+          except: pass
           ")
-          
+
+          echo "PUBLIC_URL=$PUBLIC_URL" >> $GITHUB_ENV
+
+          # Write to Step Summary (readable via API!)
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          # 🖥️ MyServer is LIVE!
+
+          ## 🔗 Your URL:
+          ## [$PUBLIC_URL]($PUBLIC_URL)
+
+          Open this link in your browser to access the Ubuntu Linux shell!
+
+          > ⏱️ Session lasts up to 6 hours
+          EOF
+
           echo ""
           echo "╔══════════════════════════════════════════╗"
           echo "║        🖥️  MyServer is LIVE!             ║"
           echo "╠══════════════════════════════════════════╣"
-          echo "║  URL: $PUBLIC_URL"
+          echo "║  🔗 URL: $PUBLIC_URL"
           echo "╚══════════════════════════════════════════╝"
-          echo ""
-          echo "🔗 Open this URL in your browser to access the Linux shell!"
-          
-          # Keep alive
-          wait $SERVER_PID
+
+      - name: ⏳ Keep Alive (up to 6h)
+        run: |
+          echo "Server is running at: $PUBLIC_URL"
+          echo "Keeping alive..."
+          sleep 21600
