@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       ngrok_token:
-        description: 'Ngrok Auth Token'
+        description: 'Ngrok token (optional, uses secret if empty)'
         required: false
         type: string
 
@@ -23,27 +23,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Get ngrok token
+      - name: Resolve ngrok token
         run: |
+          # Prefer manually passed token, fallback to secret
           TOKEN="${{ github.event.inputs.ngrok_token }}"
           if [ -z "$TOKEN" ]; then
-            TOKEN=$(cat NGROK_TOKEN.txt 2>/dev/null | tr -d '\n' || echo "")
+            TOKEN="${{ secrets.NGROK_TOKEN }}"
+          fi
+          if [ -z "$TOKEN" ]; then
+            echo "ERROR: No ngrok token found"; exit 1
           fi
           echo "NGROK_TOKEN=${TOKEN}" >> $GITHUB_ENV
-
-      - name: Skip if no token
-        run: |
-          if [ -z "${{ env.NGROK_TOKEN }}" ]; then
-            echo "No token, skip"; exit 0
-          fi
-          echo "Token OK (${#NGROK_TOKEN} chars)"
 
       - name: Full sudo
         run: |
           echo "runner ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/runner
           sudo chmod 0440 /etc/sudoers.d/runner
 
-      - name: Install tools
+      - name: Install system tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
@@ -52,15 +49,17 @@ jobs:
             zip unzip tar gzip nmap netcat-openbsd jq bc \
             build-essential gcc g++ make sqlite3 screen tmux lsof tree rsync
 
-      - name: Python deps
+      - name: Install Python deps
         run: sudo pip install aiohttp -q
 
       - name: Install ngrok
         run: |
-          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+            | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt-get update -qq && sudo apt-get install -y ngrok
-          ngrok config add-authtoken ${{ env.NGROK_TOKEN }}
+          ngrok config add-authtoken "${{ env.NGROK_TOKEN }}"
 
       - name: Restore state
         env:
@@ -71,7 +70,7 @@ jobs:
       - name: Run server
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPO: ${{ github.repository }}
-          NGROK_TOKEN: ${{ env.NGROK_TOKEN }}
           WORKFLOW_ID: termux.yml
         run: bash scripts/run-server.sh
