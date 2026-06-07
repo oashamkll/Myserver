@@ -17,25 +17,28 @@ HTML = r"""<!DOCTYPE html>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;background:#000;overflow:hidden;
-  -webkit-text-size-adjust:100%;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+  -webkit-text-size-adjust:100%;touch-action:manipulation}
 
 /* ── TOP BAR ── */
 .topbar{
   position:fixed;top:0;left:0;right:0;height:38px;
   background:#000;border-bottom:1px solid #111;
   display:flex;align-items:center;padding:0 10px;gap:7px;z-index:100;
+  user-select:none;-webkit-user-select:none;
 }
 .tb-logo{font-size:14px;font-weight:700;color:#50fa7b;
-  font-family:'Hack','DejaVu Sans Mono',monospace;letter-spacing:.3px}
+  font-family:'Hack','DejaVu Sans Mono',monospace}
 .tb-badge{font-size:10px;color:#444;font-family:'Hack',monospace;
   background:#0a0a0a;border:1px solid #1a1a1a;padding:1px 6px;border-radius:3px}
-.tb-dot{width:6px;height:6px;border-radius:50%;background:#50fa7b;flex-shrink:0;animation:blink 2s infinite}
+.tb-dot{width:6px;height:6px;border-radius:50%;background:#50fa7b;
+  flex-shrink:0;animation:blink 2s infinite}
 .tb-dot.off{background:#ff5555;animation:none}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 .tb-st{font-size:10px;color:#2a2a2a;font-family:'Hack',monospace}
 .tb-sp{flex:1}
-.tb-btn{background:none;border:none;color:#2a2a2a;font-size:15px;padding:3px 8px;
-  cursor:pointer;border-radius:3px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;line-height:1}
+.tb-btn{background:none;border:none;color:#2a2a2a;font-size:15px;
+  padding:3px 8px;cursor:pointer;border-radius:3px;
+  -webkit-tap-highlight-color:transparent;touch-action:manipulation;line-height:1}
 .tb-btn:active{background:#111;color:#888}
 
 /* ── TERMINAL ── */
@@ -44,7 +47,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 #tw .xterm-viewport{overflow-y:hidden!important}
 #tw .xterm-screen{cursor:text}
 
-/* ── EXTRA KEYS ── */
+/* ── EXTRA KEYS BAR ── */
 .xkeys{
   position:fixed;bottom:46px;left:0;right:0;height:44px;
   background:#000;border-top:1px solid #111;
@@ -59,17 +62,27 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   font-family:'Hack','DejaVu Sans Mono',monospace;
   white-space:nowrap;cursor:pointer;flex-shrink:0;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;
-  min-width:34px;text-align:center;user-select:none;-webkit-user-select:none;
+  min-width:34px;text-align:center;
+  user-select:none;-webkit-user-select:none;
 }
 .xk:active{background:#1a1a1a;color:#fff}
-/* CTRL sticky — turns blue when active */
-.xk.ctrl-btn{color:#8be9fd;border-color:#1a2a2a;font-weight:600}
-.xk.ctrl-btn.on{background:#0a2030;border-color:#8be9fd;color:#8be9fd;
-  box-shadow:0 0 8px #8be9fd44}
+
+/* CTRL sticky key */
+.xk.ctrl-btn{
+  color:#8be9fd;border-color:#1a2a2a;font-weight:700;
+  min-width:48px;letter-spacing:.5px;
+}
+/* When CTRL is latched — glows blue */
+.xk.ctrl-btn.latched{
+  background:#061a28;border-color:#8be9fd;color:#8be9fd;
+  box-shadow:0 0 10px #8be9fd55;
+  animation:ctrlpulse 1s infinite;
+}
+@keyframes ctrlpulse{0%,100%{box-shadow:0 0 6px #8be9fd44}50%{box-shadow:0 0 14px #8be9fd99}}
+
 .xk.c{color:#8be9fd;border-color:#1a2a2a}
 .xk.y{color:#f1fa8c;border-color:#2a2a1a}
 .xk.g{color:#50fa7b;border-color:#1a2a1a}
-.xk.r{color:#ff5555;border-color:#2a1a1a}
 
 /* ── ACTION BAR ── */
 .abar{
@@ -87,36 +100,17 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 .ab:active{background:#1a1a1a;color:#ccc}
 .ab.r{color:#ff5555;border-color:#2a1111}
 
-/* ── CTRL LETTER PICKER ── */
-#ctrl-pick{
-  display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,.82);z-index:200;
-  align-items:flex-end;justify-content:center;
-  padding-bottom:94px;
+/* ── CTRL LATCH HINT (shown above keyboard when latched) ── */
+#ctrl-hint{
+  display:none;
+  position:fixed;bottom:90px;left:0;right:0;
+  background:#061a28;border-top:1px solid #8be9fd;border-bottom:1px solid #8be9fd;
+  padding:6px 12px;z-index:150;
+  font-family:'Hack',monospace;font-size:12px;color:#8be9fd;
+  text-align:center;letter-spacing:.5px;
+  pointer-events:none;
 }
-#ctrl-pick.show{display:flex}
-.cp-box{
-  background:#050505;border:1px solid #8be9fd;border-radius:8px;
-  padding:12px 10px;width:min(96vw,380px);
-}
-.cp-title{font-size:11px;color:#8be9fd;text-align:center;margin-bottom:10px;
-  font-family:'Hack',monospace;letter-spacing:1px}
-.cp-grid{display:grid;grid-template-columns:repeat(9,1fr);gap:4px}
-.ck{
-  background:#111;border:1px solid #222;color:#ccc;
-  padding:8px 2px;border-radius:4px;font-size:13px;
-  font-family:'Hack',monospace;text-align:center;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;touch-action:manipulation;
-  user-select:none;-webkit-user-select:none;
-}
-.ck:active{background:#1a3a3a;color:#8be9fd}
-.cp-cancel{
-  margin-top:10px;width:100%;background:#111;border:1px solid #222;
-  color:#444;padding:8px;border-radius:4px;font-size:12px;
-  font-family:'Hack',monospace;cursor:pointer;
-  -webkit-tap-highlight-color:transparent;
-}
-.cp-cancel:active{background:#1a1a1a;color:#888}
+#ctrl-hint.show{display:block}
 
 /* ── DISCONNECT OVERLAY ── */
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);
@@ -148,20 +142,31 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 <!-- TERMINAL -->
 <div id="tw"></div>
 
+<!-- CTRL HINT BAR — appears above keyboard when CTRL is latched -->
+<div id="ctrl-hint">⌨ CTRL latched — now press any key on your keyboard…  (tap CTRL again to cancel)</div>
+
 <!-- EXTRA KEYS -->
 <div class="xkeys">
-  <!-- ONE Ctrl button with letter picker -->
+  <!--
+    CTRL button:
+    - Tap once  → latches (glows blue) → your next physical keypress becomes Ctrl+key
+    - Tap again → unlatches (cancel)
+  -->
   <span class="xk ctrl-btn" id="ctrl-btn" onclick="toggleCtrl()">CTRL</span>
-  <!-- arrow keys -->
+  <!-- arrows -->
   <span class="xk y" onclick="sr('\x1b[A')">▲</span>
   <span class="xk y" onclick="sr('\x1b[B')">▼</span>
   <span class="xk y" onclick="sr('\x1b[D')">◀</span>
   <span class="xk y" onclick="sr('\x1b[C')">▶</span>
-  <!-- tab / del / home / end -->
+  <!-- nav -->
   <span class="xk y" onclick="sr('\t')">TAB</span>
   <span class="xk y" onclick="sr('\x1b[3~')">DEL</span>
   <span class="xk y" onclick="sr('\x01')">HOME</span>
   <span class="xk y" onclick="sr('\x05')">END</span>
+  <!-- quick ctrl shortcuts (always available) -->
+  <span class="xk c" onclick="sk('c')">^C</span>
+  <span class="xk c" onclick="sk('d')">^D</span>
+  <span class="xk c" onclick="sk('z')">^Z</span>
   <!-- symbols -->
   <span class="xk" onclick="sr('| ')">|</span>
   <span class="xk" onclick="sr('> ')">&gt;</span>
@@ -172,7 +177,7 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   <span class="xk" onclick="sr('-')"> - </span>
   <span class="xk" onclick="sr('.')"> . </span>
   <span class="xk" onclick="sr('_')"> _ </span>
-  <!-- shortcuts -->
+  <!-- commands -->
   <span class="xk g" onclick="sl('ls -la')">ls</span>
   <span class="xk g" onclick="sl('pwd')">pwd</span>
   <span class="xk g" onclick="sl('cd ~')">cd ~</span>
@@ -206,15 +211,6 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   <button class="ab r" onclick="sk('c')">KILL</button>
 </div>
 
-<!-- CTRL LETTER PICKER -->
-<div id="ctrl-pick">
-  <div class="cp-box">
-    <div class="cp-title">— CTRL + ? —</div>
-    <div class="cp-grid" id="cp-grid"></div>
-    <button class="cp-cancel" onclick="cancelCtrl()">cancel</button>
-  </div>
-</div>
-
 <!-- DISCONNECT OVERLAY -->
 <div class="ov" id="ov">
   <div class="ov-box">
@@ -226,63 +222,49 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 
 <script>
 'use strict';
-let ws=null,term=null,fit=null,alive=false;
-let ctrlMode=false;   // true = next keypress sent as Ctrl+key
+let ws=null, term=null, fit=null, alive=false;
 
-const dot  = document.getElementById('dot');
-const stxt = document.getElementById('stext');
+// ── CTRL LATCH STATE ──────────────────────────────────────────
+// ctrlLatched = true means: next key from physical keyboard → send as Ctrl+key
+let ctrlLatched = false;
+
+const dot     = document.getElementById('dot');
+const stxt    = document.getElementById('stext');
 const ctrlBtn = document.getElementById('ctrl-btn');
+const ctrlHint= document.getElementById('ctrl-hint');
 
-function setOk(m){dot.className='tb-dot';stxt.textContent=m;alive=true}
-function setOff(m){dot.className='tb-dot off';stxt.textContent=m;alive=false}
+function setOk(m) { dot.className='tb-dot';     stxt.textContent=m; alive=true;  }
+function setOff(m){ dot.className='tb-dot off'; stxt.textContent=m; alive=false; }
 
-/* ── CTRL PICKER ── */
-function buildCtrlGrid(){
-  const grid=document.getElementById('cp-grid');
-  // Letters A-Z
-  const keys='abcdefghijklmnopqrstuvwxyz[]\\^_'.split('');
-  keys.forEach(k=>{
-    const el=document.createElement('div');
-    el.className='ck';
-    el.textContent=k.toUpperCase();
-    el.onclick=()=>{
-      // Ctrl+a=1, Ctrl+b=2 ... Ctrl+z=26
-      let code;
-      if(k>='a'&&k<='z') code=k.charCodeAt(0)-96;
-      else if(k==='[') code=27;
-      else if(k==='\\') code=28;
-      else if(k===']') code=29;
-      else if(k==='^') code=30;
-      else if(k==='_') code=31;
-      else code=k.charCodeAt(0);
-      sr(String.fromCharCode(code));
-      closeCtrlPick();
-    };
-    grid.appendChild(el);
-  });
-}
-buildCtrlGrid();
-
-function toggleCtrl(){
-  // Open picker immediately
-  document.getElementById('ctrl-pick').classList.add('show');
-  ctrlBtn.classList.add('on');
-  term&&term.focus();
-}
-function cancelCtrl(){closeCtrlPick()}
-function closeCtrlPick(){
-  document.getElementById('ctrl-pick').classList.remove('show');
-  ctrlBtn.classList.remove('on');
-  term&&term.focus();
+function setCtrlLatched(on) {
+  ctrlLatched = on;
+  if (on) {
+    ctrlBtn.classList.add('latched');
+    ctrlHint.classList.add('show');
+    // Shift terminal up so hint is visible
+    document.getElementById('tw').style.bottom = '112px';
+  } else {
+    ctrlBtn.classList.remove('latched');
+    ctrlHint.classList.remove('show');
+    document.getElementById('tw').style.bottom = '';
+    setTimeout(doResize, 80);
+  }
 }
 
-/* ── INIT XTERM ── */
-function initTerm(){
-  if(term){try{term.dispose()}catch(e){}; term=null}
-  term=new Terminal({
-    theme:{
-      background:'#000000',foreground:'#f8f8f2',
-      cursor:'#50fa7b',cursorAccent:'#000000',
+function toggleCtrl() {
+  setCtrlLatched(!ctrlLatched);
+  // Focus the xterm so physical keyboard events go there
+  term && term.focus();
+}
+
+// ── INIT XTERM ────────────────────────────────────────────────
+function initTerm() {
+  if (term) { try { term.dispose(); } catch(e){} term = null; }
+
+  term = new Terminal({
+    theme: {
+      background:'#000000', foreground:'#f8f8f2',
+      cursor:'#50fa7b',     cursorAccent:'#000000',
       selectionBackground:'#44475a88',
       black:'#000000',   red:'#ff5555',
       green:'#50fa7b',   yellow:'#f1fa8c',
@@ -293,92 +275,129 @@ function initTerm(){
       brightBlue:'#d6acff',   brightMagenta:'#ff92df',
       brightCyan:'#a4ffff',   brightWhite:'#ffffff',
     },
-    fontFamily:"'Hack','DejaVu Sans Mono','Courier New',monospace",
-    fontSize:13,lineHeight:1.18,letterSpacing:0,
-    cursorBlink:true,cursorStyle:'block',
-    scrollback:10000,allowTransparency:false,
-    convertEol:false,disableStdin:false,allowProposedApi:true,
+    fontFamily: "'Hack','DejaVu Sans Mono','Courier New',monospace",
+    fontSize: 13, lineHeight: 1.18, letterSpacing: 0,
+    cursorBlink: true, cursorStyle: 'block',
+    scrollback: 10000, allowTransparency: false,
+    convertEol: false, disableStdin: false, allowProposedApi: true,
   });
-  fit=new FitAddon.FitAddon();
+
+  fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  try{term.loadAddon(new WebLinksAddon.WebLinksAddon())}catch(e){}
+  try { term.loadAddon(new WebLinksAddon.WebLinksAddon()); } catch(e) {}
   term.open(document.getElementById('tw'));
   doResize();
   term.focus();
 
-  term.onData(data=>{
-    if(ws&&ws.readyState===WebSocket.OPEN)
-      ws.send(JSON.stringify({type:'input',data}));
+  // ── Key handler: intercept when CTRL is latched ──
+  term.onData(data => {
+    if (ctrlLatched) {
+      // xterm already converts physical Ctrl+A → '\x01' etc.
+      // So if user pressed e.g. physical 'a' while CTRL latched,
+      // xterm sends '\x61' (a). We convert it to Ctrl+a '\x01'.
+      // But if they pressed Ctrl+A on physical kb, xterm sends '\x01' directly.
+      let out = data;
+      // Only remap printable ASCII a-z / A-Z (xterm sends them as-is when no modifier)
+      if (data.length === 1) {
+        const code = data.charCodeAt(0);
+        // printable a-z (97-122) or A-Z (65-90) → convert to ctrl
+        if (code >= 65 && code <= 90) {
+          out = String.fromCharCode(code - 64);   // A→1, B→2...
+        } else if (code >= 97 && code <= 122) {
+          out = String.fromCharCode(code - 96);   // a→1, b→2...
+        }
+        // digits / symbols: send as-is (so user can type Ctrl+[ etc.)
+      }
+      setCtrlLatched(false); // unlatch after one key
+      sr(out);
+      return; // don't fall through to normal send
+    }
+    // Normal send
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'input', data }));
   });
-  term.onResize(({cols,rows})=>{
-    if(ws&&ws.readyState===WebSocket.OPEN)
-      ws.send(JSON.stringify({type:'resize',cols,rows}));
+
+  term.onResize(({ cols, rows }) => {
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
   });
 }
 
-/* ── WEBSOCKET ── */
-function connect(){
-  const proto=location.protocol==='https:'?'wss:':'ws:';
-  ws=new WebSocket(proto+'//'+location.host+'/ws');
-  ws.onopen=()=>{setOk('root@ubuntu');term.focus();setTimeout(()=>{doResize();term.focus()},250)};
-  ws.onmessage=e=>term.write(e.data);
-  ws.onclose=()=>{
+// ── WEBSOCKET ─────────────────────────────────────────────────
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onopen  = () => { setOk('root@ubuntu'); term.focus(); setTimeout(() => { doResize(); term.focus(); }, 250); };
+  ws.onmessage = e => term.write(e.data);
+  ws.onclose = () => {
     setOff('disconnected');
-    if(alive){term.write('\r\n\x1b[31m[!] connection lost\x1b[0m\r\n');
-      document.getElementById('ov').classList.add('show')}
-    alive=false;
+    if (alive) {
+      term.write('\r\n\x1b[31m[!] connection lost\x1b[0m\r\n');
+      document.getElementById('ov').classList.add('show');
+    }
+    alive = false;
   };
-  ws.onerror=()=>setOff('error');
+  ws.onerror = () => setOff('error');
 }
-function reconnect(){
-  try{ws&&ws.close()}catch(e){}
+
+function reconnect() {
+  try { ws && ws.close(); } catch(e) {}
+  setCtrlLatched(false);
   setOff('reconnecting…');
-  setTimeout(()=>{initTerm();connect()},600);
+  setTimeout(() => { initTerm(); connect(); }, 600);
 }
-function closeOv(){document.getElementById('ov').classList.remove('show')}
+function closeOv() { document.getElementById('ov').classList.remove('show'); }
 
-/* ── HELPERS ── */
-function sr(data){
-  if(ws&&ws.readyState===WebSocket.OPEN)
-    ws.send(JSON.stringify({type:'input',data}));
-  term&&term.focus();
+// ── HELPERS ───────────────────────────────────────────────────
+function sr(data) {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({ type: 'input', data }));
+  term && term.focus();
 }
-function sl(cmd){sr(cmd+'\n')}
-function sk(key){
-  const m={c:'\x03',d:'\x04',z:'\x1a',l:'\x0c',a:'\x01',e:'\x05',u:'\x15',k:'\x0b'};
-  sr(m[key]||key);
+function sl(cmd) { sr(cmd + '\n'); }
+function sk(key) {
+  const m = { c:'\x03', d:'\x04', z:'\x1a', l:'\x0c',
+               a:'\x01', e:'\x05', u:'\x15', k:'\x0b' };
+  sr(m[key] || key);
 }
 
-/* ── RESIZE ── */
-function doResize(){
-  try{
+// ── RESIZE ────────────────────────────────────────────────────
+function doResize() {
+  try {
     fit.fit();
-    if(ws&&ws.readyState===WebSocket.OPEN)
-      ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows}));
-  }catch(e){}
+    if (ws && ws.readyState === WebSocket.OPEN)
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+  } catch(e) {}
 }
-window.addEventListener('resize',doResize);
-if(window.visualViewport){
-  window.visualViewport.addEventListener('resize',()=>{
-    const kb=window.innerHeight-window.visualViewport.height;
-    const tw=document.getElementById('tw');
-    const xk=document.querySelector('.xkeys');
-    const ab=document.querySelector('.abar');
-    if(kb>80){
-      ab.style.bottom=kb+'px';
-      xk.style.bottom=(kb+46)+'px';
-      tw.style.bottom=(kb+90)+'px';
-    }else{ab.style.bottom=xk.style.bottom=tw.style.bottom=''}
-    setTimeout(doResize,120);
+window.addEventListener('resize', doResize);
+
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const kb = window.innerHeight - window.visualViewport.height;
+    const tw = document.getElementById('tw');
+    const xk = document.querySelector('.xkeys');
+    const ab = document.querySelector('.abar');
+    const ch = document.getElementById('ctrl-hint');
+    if (kb > 80) {
+      ab.style.bottom  = kb + 'px';
+      xk.style.bottom  = (kb + 46) + 'px';
+      ch.style.bottom  = (kb + 90) + 'px';
+      tw.style.bottom  = ctrlLatched ? (kb + 112) + 'px' : (kb + 90) + 'px';
+    } else {
+      ab.style.bottom = xk.style.bottom = ch.style.bottom = '';
+      tw.style.bottom = ctrlLatched ? '112px' : '';
+    }
+    setTimeout(doResize, 120);
   });
 }
 
 // Keepalive ping every 20s
-setInterval(()=>{
-  if(ws&&ws.readyState===WebSocket.OPEN)
-    ws.send(JSON.stringify({type:'ping'}));
-},20000);
+setInterval(() => {
+  if (ws && ws.readyState === WebSocket.OPEN)
+    ws.send(JSON.stringify({ type: 'ping' }));
+}, 20000);
 
+// ── BOOT ──────────────────────────────────────────────────────
 initTerm();
 connect();
 </script>
@@ -428,13 +447,12 @@ async def handle_ws(request):
                 'LANG':            'en_US.UTF-8',
                 'LC_ALL':          'en_US.UTF-8',
                 'DEBIAN_FRONTEND': 'noninteractive',
-                # Clean prompt: root@ubuntu:~#
                 'PS1': r'\[\033[01;32m\]root@ubuntu\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ ',
             }
             try: os.chdir('/root')
             except: pass
-            # Set hostname so it shows correctly
-            try: open('/etc/hostname','w').write('ubuntu\n')
+            try:
+                with open('/etc/hostname','w') as f: f.write('ubuntu\n')
             except: pass
             os.execvpe('/bin/bash', ['/bin/bash', '--login'], env)
             os._exit(1)
@@ -457,7 +475,7 @@ async def handle_ws(request):
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:
                         pkt = json.loads(msg.data)
-                        t = pkt.get('type','')
+                        t = pkt.get('type', '')
                         if t == 'input':
                             os.write(fd, pkt['data'].encode('utf-8'))
                         elif t == 'resize':
