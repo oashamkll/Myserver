@@ -10,138 +10,116 @@ import termios
 from aiohttp import web
 import aiohttp
 
-HTML = """<!DOCTYPE html>
+HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
 <title>Termux</title>
+<!-- xterm.js CDN -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"/>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --bg: #000000;
-  --text: #ffffff;
-  --green: #55ff55;
-  --yellow: #ffff55;
-  --cyan: #55ffff;
-  --red: #ff5555;
-  --gray: #aaaaaa;
-  --btn-bg: #1a1a1a;
-  --btn-border: #333333;
-  --btn-text: #ffffff;
-  --topbar-bg: #111111;
-  --cursor: #55ff55;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
-  height: 100%;
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Courier New', 'DejaVu Sans Mono', monospace;
+  width: 100%; height: 100%;
+  background: #000;
   overflow: hidden;
+  font-family: 'Courier New', monospace;
   -webkit-text-size-adjust: 100%;
 }
 
-/* ── TOP BAR (Termux style) ── */
+/* ── TOP BAR ── */
 .topbar {
-  height: 36px;
-  background: var(--topbar-bg);
-  border-bottom: 1px solid #222;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 38px;
+  background: #111;
+  border-bottom: 1px solid #1e1e1e;
   display: flex;
   align-items: center;
   padding: 0 10px;
   gap: 8px;
-  position: fixed;
-  top: 0; left: 0; right: 0;
   z-index: 100;
+  user-select: none;
 }
-.topbar-title {
-  font-size: 13px;
+.tb-title {
+  font-size: 14px;
   font-weight: bold;
-  color: var(--green);
+  color: #55ff55;
   font-family: 'Courier New', monospace;
-  letter-spacing: 0.5px;
 }
-.topbar-session {
+.tb-session {
   font-size: 11px;
-  color: var(--gray);
-  font-family: 'Courier New', monospace;
+  color: #555;
+  font-family: monospace;
+  padding: 1px 6px;
+  border: 1px solid #222;
+  border-radius: 3px;
 }
-.dot-alive {
+.tb-dot {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: var(--green);
-  animation: blink 2s infinite;
+  background: #55ff55;
   flex-shrink: 0;
+  animation: pulse 2s infinite;
 }
-.dot-alive.off { background: var(--red); animation: none; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
-.spacer { flex: 1; }
-.tbtn {
-  background: transparent;
-  border: none;
-  color: var(--gray);
-  font-size: 13px;
-  padding: 4px 7px;
-  cursor: pointer;
-  border-radius: 4px;
-  font-family: monospace;
+.tb-dot.off { background: #ff5555; animation: none; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.25} }
+.tb-status { font-size: 11px; color: #444; font-family: monospace; }
+.tb-space { flex: 1; }
+.tb-btn {
+  background: none; border: none;
+  color: #555; font-size: 14px;
+  padding: 4px 8px; cursor: pointer;
+  border-radius: 3px; font-family: monospace;
   -webkit-tap-highlight-color: transparent;
 }
-.tbtn:active { background: #222; }
+.tb-btn:active { background: #1a1a1a; color: #aaa; }
 
-/* ── TERMINAL ── */
-.term-wrap {
+/* ── TERMINAL AREA ── */
+#terminal-container {
   position: fixed;
-  top: 36px;
-  bottom: 132px;
+  top: 38px;
   left: 0; right: 0;
-  background: var(--bg);
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding: 6px 4px 4px 4px;
+  bottom: 90px;
+  background: #000;
+  overflow: hidden;
 }
-#output {
-  font-family: 'Courier New', 'DejaVu Sans Mono', monospace;
-  font-size: 13px;
-  line-height: 1.4;
-  white-space: pre-wrap;
-  word-break: break-all;
-  min-height: 100%;
-  color: var(--text);
+#terminal-container .xterm {
+  height: 100%;
+  padding: 4px;
 }
-@media(max-width:480px){ #output { font-size: 12px; } }
+#terminal-container .xterm-viewport {
+  overflow-y: auto !important;
+}
+#terminal-container .xterm-screen {
+  cursor: text;
+}
 
-/* ANSI colors */
-.f0{color:#000000} .f1{color:#ff5555} .f2{color:#55ff55} .f3{color:#ffff55}
-.f4{color:#5555ff} .f5{color:#ff55ff} .f6{color:#55ffff} .f7{color:#ffffff}
-.f8{color:#555555} .f9{color:#ff5555} .f10{color:#55ff55} .f11{color:#ffff55}
-.f12{color:#5555ff} .f13{color:#ff55ff} .f14{color:#55ffff} .f15{color:#ffffff}
-.bold{font-weight:bold} .dim{opacity:.5} .underline{text-decoration:underline}
-
-/* ── EXTRA KEYS BAR (Termux style) ── */
+/* ── EXTRA KEYS BAR ── */
 .extrakeys {
   position: fixed;
-  bottom: 88px;
-  left: 0; right: 0;
+  bottom: 46px; left: 0; right: 0;
   height: 44px;
-  background: #111111;
-  border-top: 1px solid #222;
+  background: #0d0d0d;
+  border-top: 1px solid #1a1a1a;
   display: flex;
   overflow-x: auto;
   scrollbar-width: none;
-  padding: 4px 4px;
-  gap: 4px;
+  gap: 3px;
+  padding: 5px 4px;
   z-index: 99;
   -webkit-overflow-scrolling: touch;
   align-items: center;
 }
 .extrakeys::-webkit-scrollbar { display: none; }
 .ek {
-  background: #1e1e1e;
-  border: 1px solid #333;
-  color: #dddddd;
-  padding: 4px 10px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  color: #ccc;
+  padding: 3px 9px;
   border-radius: 3px;
   font-size: 12px;
   font-family: 'Courier New', monospace;
@@ -150,353 +128,318 @@ html, body {
   flex-shrink: 0;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  min-width: 34px;
+  min-width: 32px;
   text-align: center;
+  line-height: 1.5;
 }
-.ek:active { background: #333; }
-.ek.spec { color: var(--yellow); border-color: #555; }
-.ek.ctrl-key { color: var(--cyan); border-color: #555; }
+.ek:active { background: #2a2a2a; color: #fff; }
+.ek.ctrl  { color: #55ffff; border-color: #1e3333; }
+.ek.spec  { color: #ffff55; border-color: #33331e; }
+.ek.grn   { color: #55ff55; border-color: #1e331e; }
 
-/* ── BOTTOM INPUT BAR ── */
-.bottombar {
+/* ── BOTTOM ACTION BAR ── */
+.actionbar {
   position: fixed;
   bottom: 0; left: 0; right: 0;
-  height: 88px;
-  background: #111111;
-  border-top: 1px solid #222;
+  height: 46px;
+  background: #0d0d0d;
+  border-top: 1px solid #1a1a1a;
   display: flex;
-  flex-direction: column;
+  gap: 3px;
+  padding: 5px 4px;
   z-index: 100;
-}
-.input-row {
-  flex: 1;
-  display: flex;
   align-items: center;
-  padding: 6px 6px 0 6px;
-  gap: 5px;
 }
-#cmd {
+.ab-btn {
   flex: 1;
   background: #1a1a1a;
-  border: 1px solid #333;
-  color: var(--text);
-  padding: 8px 10px;
-  border-radius: 4px;
-  font-family: 'Courier New', monospace;
-  font-size: 13px;
-  outline: none;
-  -webkit-appearance: none;
-  caret-color: var(--green);
-}
-#cmd:focus { border-color: #555; }
-#cmd::placeholder { color: #444; }
-.send-btn {
-  background: #1e1e1e;
-  border: 1px solid #444;
-  color: var(--green);
-  width: 40px; height: 36px;
-  border-radius: 4px;
-  font-size: 16px;
-  cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-  font-family: monospace;
-  -webkit-tap-highlight-color: transparent;
-}
-.send-btn:active { background: #333; }
-.action-row {
-  display: flex;
-  padding: 4px 6px 6px 6px;
-  gap: 4px;
-}
-.act-btn {
-  flex: 1;
-  background: #1a1a1a;
-  border: 1px solid #2a2a2a;
+  border: 1px solid #222;
   color: #888;
   font-size: 11px;
-  padding: 4px 2px;
+  padding: 5px 2px;
   border-radius: 3px;
   cursor: pointer;
   font-family: monospace;
   text-align: center;
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
-.act-btn:active { background: #222; color: #ccc; }
-
-#file-input { display: none; }
+.ab-btn:active { background: #252525; color: #ccc; }
+.ab-btn.red { color: #ff5555; border-color: #331a1a; }
 
 /* ── DISCONNECT OVERLAY ── */
 .overlay {
-  display: none;
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.85);
-  z-index: 200;
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.9); z-index: 300;
   align-items: center; justify-content: center;
 }
 .overlay.show { display: flex; }
-.card {
-  background: #111;
-  border: 1px solid #333;
-  border-radius: 8px;
-  padding: 24px;
-  width: min(88vw,300px);
+.ov-card {
+  background: #0d0d0d;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  padding: 28px 24px;
   text-align: center;
   font-family: 'Courier New', monospace;
+  min-width: 240px;
 }
-.card h3 { font-size: 15px; color: var(--green); margin-bottom: 8px; }
-.card p  { font-size: 12px; color: var(--gray); margin-bottom: 16px; }
-.card button {
-  background: #1e1e1e;
-  border: 1px solid #55ff55;
-  color: var(--green);
-  padding: 8px 20px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-family: 'Courier New', monospace;
-  cursor: pointer;
-  width: 100%;
+.ov-card h3 { color: #ff5555; font-size: 14px; margin-bottom: 10px; }
+.ov-card p  { color: #555; font-size: 12px; margin-bottom: 20px; line-height: 1.6; }
+.ov-card button {
+  background: #1a1a1a; border: 1px solid #55ff55;
+  color: #55ff55; padding: 9px 0; width: 100%;
+  border-radius: 4px; font-size: 13px;
+  font-family: 'Courier New', monospace; cursor: pointer;
 }
-.card button:active { background: #222; }
+.ov-card button:active { background: #1e2e1e; }
+
+/* xterm theme overrides */
+.xterm-cursor-block { background: #55ff55 !important; }
 </style>
 </head>
 <body>
 
+<!-- TOP BAR -->
 <div class="topbar">
-  <div class="topbar-title">Termux</div>
-  <div class="topbar-session">[1]</div>
-  <div class="dot-alive" id="dot"></div>
-  <span style="font-size:11px;color:#555;font-family:monospace" id="stext">connecting...</span>
-  <div class="spacer"></div>
-  <button class="tbtn" onclick="doCtrl('l')" title="Clear">✕</button>
-  <label class="tbtn" for="file-input" title="Upload">⇧</label>
-  <button class="tbtn" onclick="reconnect()" title="Reconnect">↺</button>
+  <span class="tb-title">Termux</span>
+  <span class="tb-session">[1] bash</span>
+  <div class="tb-dot" id="dot"></div>
+  <span class="tb-status" id="stext">connecting...</span>
+  <div class="tb-space"></div>
+  <button class="tb-btn" onclick="sendCtrl('l')" title="Clear">✕</button>
+  <button class="tb-btn" onclick="reconnect()" title="Reconnect">↺</button>
 </div>
-<input type="file" id="file-input" onchange="uploadFile(this)"/>
 
-<div class="term-wrap" id="tw"><div id="output"></div></div>
+<!-- TERMINAL -->
+<div id="terminal-container"></div>
 
-<!-- Extra keys like Termux -->
+<!-- EXTRA KEYS -->
 <div class="extrakeys">
-  <span class="ek ctrl-key" onclick="doCtrl('c')">Ctrl+C</span>
-  <span class="ek ctrl-key" onclick="doCtrl('d')">Ctrl+D</span>
-  <span class="ek ctrl-key" onclick="doCtrl('z')">Ctrl+Z</span>
-  <span class="ek spec"    onclick="doCtrl('tab')">TAB</span>
-  <span class="ek spec"    onclick="doHist(1)">▲</span>
-  <span class="ek spec"    onclick="doHist(-1)">▼</span>
-  <span class="ek"         onclick="typeCmd('| ')">|</span>
-  <span class="ek"         onclick="typeCmd('> ')">></span>
-  <span class="ek"         onclick="typeCmd('&& ')">&amp;&amp;</span>
-  <span class="ek"         onclick="typeCmd('/')">  /  </span>
-  <span class="ek"         onclick="typeCmd('~')">  ~  </span>
-  <span class="ek"         onclick="typeCmd('-')">  -  </span>
-  <span class="ek"         onclick="run('ls -la')">ls</span>
-  <span class="ek"         onclick="run('pwd')">pwd</span>
-  <span class="ek"         onclick="run('cd ~')">cd ~</span>
-  <span class="ek"         onclick="run('cd ..')">cd ..</span>
-  <span class="ek"         onclick="typeCmd('apt install -y ')">apt install</span>
-  <span class="ek"         onclick="run('apt update')">apt update</span>
-  <span class="ek"         onclick="typeCmd('python3 ')">python3</span>
-  <span class="ek"         onclick="typeCmd('pip install ')">pip</span>
-  <span class="ek"         onclick="typeCmd('nano ')">nano</span>
-  <span class="ek"         onclick="typeCmd('cat ')">cat</span>
-  <span class="ek"         onclick="run('whoami')">whoami</span>
-  <span class="ek"         onclick="run('df -h')">df</span>
-  <span class="ek"         onclick="run('free -h')">free</span>
-  <span class="ek"         onclick="run('ps aux')">ps</span>
-  <span class="ek"         onclick="run('uname -a')">uname</span>
-  <span class="ek"         onclick="run('ifconfig')">ip</span>
+  <span class="ek ctrl" onclick="sendCtrl('c')">Ctrl+C</span>
+  <span class="ek ctrl" onclick="sendCtrl('d')">Ctrl+D</span>
+  <span class="ek ctrl" onclick="sendCtrl('z')">Ctrl+Z</span>
+  <span class="ek spec" onclick="sendRaw('\t')">TAB</span>
+  <span class="ek spec" onclick="sendRaw('\x1b[A')">▲</span>
+  <span class="ek spec" onclick="sendRaw('\x1b[B')">▼</span>
+  <span class="ek spec" onclick="sendRaw('\x1b[C')">▶</span>
+  <span class="ek spec" onclick="sendRaw('\x1b[D')">◀</span>
+  <span class="ek" onclick="sendRaw('| ')">|</span>
+  <span class="ek" onclick="sendRaw('> ')">&gt;</span>
+  <span class="ek" onclick="sendRaw('&& ')">&amp;&amp;</span>
+  <span class="ek" onclick="sendRaw('/')"> / </span>
+  <span class="ek" onclick="sendRaw('~')"> ~ </span>
+  <span class="ek" onclick="sendRaw('-')"> - </span>
+  <span class="ek" onclick="sendRaw('.')"> . </span>
+  <span class="ek" onclick="sendRaw('\x01')">Home</span>
+  <span class="ek" onclick="sendRaw('\x05')">End</span>
+  <span class="ek" onclick="sendRaw('\x7f')">DEL</span>
+  <span class="ek grn" onclick="sendLine('ls -la')">ls</span>
+  <span class="ek grn" onclick="sendLine('pwd')">pwd</span>
+  <span class="ek grn" onclick="sendLine('cd ~')">cd ~</span>
+  <span class="ek grn" onclick="sendLine('cd ..')">cd ..</span>
+  <span class="ek grn" onclick="sendLine('clear')">clear</span>
+  <span class="ek grn" onclick="sendLine('whoami')">whoami</span>
+  <span class="ek grn" onclick="sendLine('uname -a')">uname</span>
+  <span class="ek grn" onclick="sendLine('df -h')">df</span>
+  <span class="ek grn" onclick="sendLine('free -h')">free</span>
+  <span class="ek grn" onclick="sendLine('ps aux')">ps</span>
+  <span class="ek grn" onclick="sendLine('apt update')">apt update</span>
+  <span class="ek" onclick="sendRaw('apt install -y ')">apt install</span>
+  <span class="ek" onclick="sendRaw('python3 ')">python3</span>
+  <span class="ek" onclick="sendRaw('pip install ')">pip</span>
+  <span class="ek" onclick="sendRaw('nano ')">nano</span>
+  <span class="ek" onclick="sendRaw('cat ')">cat</span>
+  <span class="ek" onclick="sendRaw('chmod +x ')">chmod</span>
+  <span class="ek" onclick="sendRaw('kill ')">kill</span>
 </div>
 
-<div class="bottombar">
-  <div class="input-row">
-    <input id="cmd" type="text" placeholder="$ type command..."
-      autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false"
-      onkeydown="onKey(event)"/>
-    <button class="send-btn" onclick="send()">↵</button>
-  </div>
-  <div class="action-row">
-    <button class="act-btn" onclick="run('clear')">CLEAR</button>
-    <button class="act-btn" onclick="run('ls')">FILES</button>
-    <button class="act-btn" onclick="run('top -bn1 | head -20')">TOP</button>
-    <button class="act-btn" onclick="run('df -h')">DISK</button>
-    <button class="act-btn" onclick="run('free -h')">MEM</button>
-    <button class="act-btn" onclick="doCtrl('c')">KILL</button>
-  </div>
+<!-- ACTION BAR -->
+<div class="actionbar">
+  <button class="ab-btn" onclick="sendLine('ls -la')">FILES</button>
+  <button class="ab-btn" onclick="sendLine('top -bn1 | head -30')">TOP</button>
+  <button class="ab-btn" onclick="sendLine('df -h && free -h')">SYS</button>
+  <button class="ab-btn" onclick="sendLine('ifconfig 2>/dev/null || ip a')">NET</button>
+  <button class="ab-btn" onclick="sendLine('history | tail -20')">HIST</button>
+  <button class="ab-btn red" onclick="sendCtrl('c')">KILL</button>
 </div>
 
+<!-- DISCONNECT OVERLAY -->
 <div class="overlay" id="ov">
-  <div class="card">
+  <div class="ov-card">
     <h3>~ disconnected ~</h3>
-    <p>Connection lost.<br/>Tap to reconnect.</p>
-    <button onclick="reconnect();closeOv()">↺ reconnect</button>
+    <p>Lost connection to server.<br/>Tap to reconnect.</p>
+    <button onclick="reconnect(); closeOv()">↺ reconnect</button>
   </div>
 </div>
 
 <script>
-let ws=null, hist=[], histIdx=-1, alive=false;
-const out=document.getElementById('output');
-const tw=document.getElementById('tw');
-const inp=document.getElementById('cmd');
-const dot=document.getElementById('dot');
-const stxt=document.getElementById('stext');
+let ws = null;
+let term = null;
+let fitAddon = null;
+let alive = false;
 
-// ── ANSI PARSER ──
-function ansi(str){
-  str=str.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-  let html='',bold=false,dim=false,underline=false,fg=-1;
-  const cls=()=>(bold||dim||underline||fg>=0)?'</span>':'';
-  const opn=()=>{
-    const c=[];
-    if(bold)c.push('bold');
-    if(dim)c.push('dim');
-    if(underline)c.push('underline');
-    if(fg>=0)c.push('f'+fg);
-    return c.length?'<span class="'+c.join(' ')+'">':'';
-  };
-  let i=0;
-  while(i<str.length){
-    if(str[i]==='\x1b'&&str[i+1]==='['){
-      let j=i+2;
-      while(j<str.length&&!/[A-Za-z]/.test(str[j]))j++;
-      const fin=str[j],seq=str.slice(i+2,j);
-      i=j+1;
-      if(fin==='m'){
-        html+=cls();
-        (seq||'0').split(';').forEach(s=>{
-          const n=parseInt(s)||0;
-          if(n===0){bold=dim=underline=false;fg=-1;}
-          else if(n===1)bold=true;
-          else if(n===2)dim=true;
-          else if(n===4)underline=true;
-          else if(n===22){bold=false;dim=false;}
-          else if(n===24)underline=false;
-          else if(n>=30&&n<=37)fg=n-30;
-          else if(n>=90&&n<=97)fg=n-82;
-          else if(n===39)fg=-1;
-        });
-        html+=opn();
-      }
-      // skip other escape sequences (cursor moves etc)
-    } else {
-      const ch=str[i++];
-      html+=ch==='&'?'&amp;':ch==='<'?'&lt;':ch==='>'?'&gt;':ch;
+const dot   = document.getElementById('dot');
+const stxt  = document.getElementById('stext');
+
+function setOk(m) { dot.className = 'tb-dot'; stxt.textContent = m; alive = true; }
+function setOff(m) { dot.className = 'tb-dot off'; stxt.textContent = m; alive = false; }
+
+// ── INIT XTERM ──
+function initTerm() {
+  if (term) { term.dispose(); term = null; }
+
+  term = new Terminal({
+    theme: {
+      background:   '#000000',
+      foreground:   '#ffffff',
+      cursor:       '#55ff55',
+      cursorAccent: '#000000',
+      black:        '#000000',
+      red:          '#ff5555',
+      green:        '#55ff55',
+      yellow:       '#ffff55',
+      blue:         '#5555ff',
+      magenta:      '#ff55ff',
+      cyan:         '#55ffff',
+      white:        '#ffffff',
+      brightBlack:  '#555555',
+      brightRed:    '#ff5555',
+      brightGreen:  '#55ff55',
+      brightYellow: '#ffff55',
+      brightBlue:   '#5555ff',
+      brightMagenta:'#ff55ff',
+      brightCyan:   '#55ffff',
+      brightWhite:  '#ffffff',
+    },
+    fontFamily: "'DejaVu Sans Mono', 'Courier New', monospace",
+    fontSize: 13,
+    lineHeight: 1.2,
+    cursorBlink: true,
+    cursorStyle: 'block',
+    scrollback: 5000,
+    allowTransparency: false,
+    convertEol: false,
+    disableStdin: false,
+    allowProposedApi: true,
+  });
+
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open(document.getElementById('terminal-container'));
+
+  try { fitAddon.fit(); } catch(e) {}
+
+  // Send keypresses to server
+  term.onData(data => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'input', data: data }));
     }
-  }
-  html+=cls();
-  return html;
-}
+  });
 
-function write(t){
-  out.innerHTML+=ansi(t);
-  // keep output size manageable
-  if(out.innerHTML.length>500000){
-    out.innerHTML=out.innerHTML.slice(-400000);
-  }
-  tw.scrollTop=tw.scrollHeight;
-}
-function writeSys(m,c){
-  out.innerHTML+='<span style="color:'+c+';font-style:italic">'+m.replace(/</g,'&lt;')+'</span>\n';
-  tw.scrollTop=tw.scrollHeight;
-}
-function doCtrl(k){
-  const m={c:'\x03',d:'\x04',z:'\x1a',l:'\x0c',tab:'\x09',a:'\x01',e:'\x05',u:'\x15',k:'\x0b'};
-  sendRaw(m[k]||k); inp.focus();
+  // Handle resize
+  term.onResize(({ cols, rows }) => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+    }
+  });
+
+  // Focus terminal
+  term.focus();
 }
 
 // ── WEBSOCKET ──
-function setOk(m){dot.className='dot-alive';stxt.textContent=m;alive=true;}
-function setOff(m){dot.className='dot-alive off';stxt.textContent=m;alive=false;}
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
 
-function connect(){
-  const p=location.protocol==='https:'?'wss:':'ws:';
-  ws=new WebSocket(p+'//'+location.host+'/ws');
-  ws.onopen=()=>{
-    setOk('root@localhost');
-    writeSys('Welcome to Termux!','#55ff55');
-    writeSys('Type commands below. You are ROOT on Ubuntu Linux.','#aaaaaa');
-    writeSys('','#aaaaaa');
-    sendPkt({type:'resize',cols:Math.floor(tw.clientWidth/7.8)||100,rows:Math.floor(tw.clientHeight/18)||30});
+  ws.onopen = () => {
+    setOk('root@ubuntu · connected');
+    term.focus();
+    // Send initial size
+    try { fitAddon.fit(); } catch(e) {}
+    setTimeout(() => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+      term.focus();
+    }, 300);
   };
-  ws.onmessage=e=>write(e.data);
-  ws.onclose=()=>{
+
+  ws.onmessage = e => {
+    term.write(e.data);
+  };
+
+  ws.onclose = () => {
     setOff('disconnected');
-    if(alive) document.getElementById('ov').classList.add('show');
-    alive=false;
-  };
-  ws.onerror=()=>setOff('error');
-}
-
-function reconnect(){
-  try{ws&&ws.close();}catch(e){}
-  out.innerHTML='';
-  setOff('reconnecting...');
-  setTimeout(connect,600);
-}
-function closeOv(){document.getElementById('ov').classList.remove('show');}
-
-function sendPkt(o){if(ws&&ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(o));}
-function sendRaw(d){sendPkt({type:'input',data:d});}
-
-function send(){
-  const v=inp.value;
-  if(!v.trim())return;
-  hist.unshift(v); histIdx=-1;
-  sendRaw(v+'\n');
-  inp.value='';
-}
-function run(cmd){sendRaw(cmd+'\n'); inp.focus();}
-function typeCmd(txt){inp.value+=txt; inp.focus();}
-function doHist(dir){
-  if(!hist.length)return;
-  histIdx=Math.max(-1,Math.min(hist.length-1,histIdx+dir));
-  inp.value=histIdx<0?'':hist[histIdx];
-}
-function onKey(e){
-  if(e.key==='Enter'){e.preventDefault();send();}
-  else if(e.key==='ArrowUp'){e.preventDefault();doHist(1);}
-  else if(e.key==='ArrowDown'){e.preventDefault();doHist(-1);}
-  else if(e.key==='Tab'){e.preventDefault();doCtrl('tab');}
-  else if(e.ctrlKey){
-    const k=e.key.toLowerCase();
-    const m={c:'\x03',d:'\x04',z:'\x1a',l:'\x0c',a:'\x01',e:'\x05',u:'\x15',k:'\x0b'};
-    if(m[k]){e.preventDefault();sendRaw(m[k]);}
-  }
-}
-
-// ── FILE UPLOAD ──
-async function uploadFile(input){
-  const file=input.files[0]; if(!file)return;
-  writeSys('\n[*] Uploading: '+file.name+' ...','#ffff55');
-  const fd=new FormData(); fd.append('file',file);
-  try{
-    const r=await fetch('/upload',{method:'POST',body:fd});
-    const d=await r.json();
-    if(d.ok){writeSys('[+] Saved: '+d.path,'#55ff55'); run('ls -lh "'+d.path+'"');}
-    else writeSys('[-] Error: '+d.error,'#ff5555');
-  }catch(e){writeSys('[-] Upload failed','#ff5555');}
-  input.value='';
-}
-
-// ── MOBILE KEYBOARD ADJUST ──
-if(window.visualViewport){
-  window.visualViewport.addEventListener('resize',()=>{
-    const kb=window.innerHeight-window.visualViewport.height;
-    const bb=document.querySelector('.bottombar');
-    const ek=document.querySelector('.extrakeys');
-    if(kb>80){
-      bb.style.bottom=kb+'px';
-      ek.style.bottom=(kb+88)+'px';
-      tw.style.bottom=(kb+132)+'px';
-    } else {
-      bb.style.bottom='';
-      ek.style.bottom='';
-      tw.style.bottom='';
+    if (alive) {
+      term.write('\r\n\x1b[31m[connection lost]\x1b[0m\r\n');
+      document.getElementById('ov').classList.add('show');
     }
-    tw.scrollTop=tw.scrollHeight;
+    alive = false;
+  };
+
+  ws.onerror = () => {
+    setOff('error');
+    term.write('\r\n\x1b[31m[websocket error]\x1b[0m\r\n');
+  };
+}
+
+function reconnect() {
+  try { ws && ws.close(); } catch(e) {}
+  setOff('reconnecting...');
+  setTimeout(() => { initTerm(); connect(); }, 500);
+}
+function closeOv() { document.getElementById('ov').classList.remove('show'); }
+
+// ── HELPERS ──
+function sendRaw(data) {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'input', data: data }));
+  }
+  term.focus();
+}
+function sendLine(cmd) { sendRaw(cmd + '\n'); }
+function sendCtrl(key) {
+  const map = {
+    'c': '\x03', 'd': '\x04', 'z': '\x1a',
+    'l': '\x0c', 'a': '\x01', 'e': '\x05',
+    'u': '\x15', 'k': '\x0b'
+  };
+  sendRaw(map[key] || key);
+}
+
+// ── RESIZE HANDLER ──
+function doResize() {
+  try {
+    fitAddon.fit();
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    }
+  } catch(e) {}
+}
+
+window.addEventListener('resize', doResize);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    const kb = window.innerHeight - window.visualViewport.height;
+    const tc = document.getElementById('terminal-container');
+    const ek = document.querySelector('.extrakeys');
+    const ab = document.querySelector('.actionbar');
+    if (kb > 80) {
+      ab.style.bottom = kb + 'px';
+      ek.style.bottom = (kb + 46) + 'px';
+      tc.style.bottom = (kb + 90) + 'px';
+    } else {
+      ab.style.bottom = '';
+      ek.style.bottom = '';
+      tc.style.bottom = '';
+    }
+    setTimeout(doResize, 100);
   });
 }
 
+// ── START ──
+initTerm();
 connect();
 </script>
 </body>
@@ -528,56 +471,69 @@ async def handle_upload(request):
         return web.json_response({'ok': False, 'error': str(e)})
 
 async def handle_ws(request):
-    ws = web.WebSocketResponse()
-    await ws.prepare(request)
+    ws_resp = web.WebSocketResponse(max_msg_size=10 * 1024 * 1024)
+    await ws_resp.prepare(request)
 
     while True:
+        # Fork a PTY for bash
         pid, fd = pty.fork()
 
         if pid == 0:
-            # Child process — exec bash as root
+            # ── CHILD: exec bash ──
             env = {
-                'TERM': 'xterm-256color',
-                'SHELL': '/bin/bash',
-                'HOME': '/root',
-                'USER': 'root',
-                'LOGNAME': 'root',
-                'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin',
-                'LANG': 'en_US.UTF-8',
-                'DEBIAN_FRONTEND': 'noninteractive',
-                # Termux-style green prompt
-                'PS1': r'\[\033[0;32m\]$ \[\033[0m\]',
+                'TERM':             'xterm-256color',
+                'COLORTERM':        'truecolor',
+                'SHELL':            '/bin/bash',
+                'HOME':             '/root',
+                'USER':             'root',
+                'LOGNAME':          'root',
+                'PATH':             '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin',
+                'LANG':             'en_US.UTF-8',
+                'LC_ALL':           'en_US.UTF-8',
+                'DEBIAN_FRONTEND':  'noninteractive',
+                'PS1':              r'\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ ',
             }
-            os.chdir('/root')
+            try:
+                os.chdir('/root')
+            except Exception:
+                pass
             os.execvpe('/bin/bash', ['/bin/bash', '--login'], env)
+            os._exit(1)
+
         else:
+            # ── PARENT: relay data ──
             loop = asyncio.get_event_loop()
-            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 40, 120, 0, 0))
+
+            # default window size
+            fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack('HHHH', 24, 80, 0, 0))
+
             shell_done = asyncio.Event()
 
-            async def pty_reader():
+            async def pty_to_ws():
                 while True:
                     try:
-                        data = await loop.run_in_executor(None, lambda: os.read(fd, 8192))
+                        data = await loop.run_in_executor(None, lambda: os.read(fd, 4096))
                         if not data:
                             break
-                        if ws.closed:
+                        if ws_resp.closed:
                             break
-                        await ws.send_str(data.decode('utf-8', errors='replace'))
+                        await ws_resp.send_str(data.decode('utf-8', errors='replace'))
                     except OSError:
                         break
                 shell_done.set()
 
-            async def ws_reader():
-                async for msg in ws:
+            async def ws_to_pty():
+                async for msg in ws_resp:
                     if msg.type == aiohttp.WSMsgType.TEXT:
                         try:
                             pkt = json.loads(msg.data)
-                            if pkt['type'] == 'input':
-                                os.write(fd, pkt['data'].encode('utf-8'))
-                            elif pkt['type'] == 'resize':
-                                cols = max(20, int(pkt.get('cols', 120)))
-                                rows = max(5,  int(pkt.get('rows', 40)))
+                            t = pkt.get('type', '')
+                            if t == 'input':
+                                raw = pkt['data'].encode('utf-8')
+                                os.write(fd, raw)
+                            elif t == 'resize':
+                                cols = max(10, int(pkt.get('cols', 80)))
+                                rows = max(2,  int(pkt.get('rows', 24)))
                                 fcntl.ioctl(fd, termios.TIOCSWINSZ,
                                             struct.pack('HHHH', rows, cols, 0, 0))
                         except Exception:
@@ -586,13 +542,17 @@ async def handle_ws(request):
                         break
                 shell_done.set()
 
-            t1 = asyncio.ensure_future(pty_reader())
-            t2 = asyncio.ensure_future(ws_reader())
+            t1 = asyncio.ensure_future(pty_to_ws())
+            t2 = asyncio.ensure_future(ws_to_pty())
+
             await shell_done.wait()
-            for t in (t1, t2):
-                t.cancel()
+
+            t1.cancel(); t2.cancel()
             try:
                 os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+            try:
                 os.waitpid(pid, 0)
             except Exception:
                 pass
@@ -601,22 +561,23 @@ async def handle_ws(request):
             except Exception:
                 pass
 
-            if ws.closed:
+            if ws_resp.closed:
                 break
 
-            # Shell exited — restart automatically
-            await ws.send_str('\r\n\x1b[32m[*] shell restarted\x1b[0m\r\n')
-            await asyncio.sleep(0.5)
+            # Shell died — restart it
+            await ws_resp.send_str('\r\n\x1b[33m[shell restarted]\x1b[0m\r\n')
+            await asyncio.sleep(0.3)
 
-    return ws
+    return ws_resp
+
 
 def main():
     app = web.Application(client_max_size=500 * 1024 * 1024)
-    app.router.add_get('/', handle_index)
-    app.router.add_get('/ws', handle_ws)
+    app.router.add_get('/',        handle_index)
+    app.router.add_get('/ws',      handle_ws)
     app.router.add_post('/upload', handle_upload)
     port = int(os.environ.get('PORT', 8080))
-    print(f'[*] Termux Server (ROOT) on :{port}')
+    print(f'[*] Termux WebShell on :{port}')
     web.run_app(app, host='0.0.0.0', port=port, access_log=None)
 
 if __name__ == '__main__':
