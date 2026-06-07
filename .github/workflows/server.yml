@@ -1,4 +1,4 @@
-name: 🖥️ MyServer — Linux Web Shell
+name: 🖥️ Termux Server — Auto Restart
 
 on:
   workflow_dispatch:
@@ -10,11 +10,12 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   run-server:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 350
 
     steps:
       - name: 📥 Checkout
@@ -26,15 +27,14 @@ jobs:
           python-version: '3.11'
 
       - name: 📦 Install dependencies
-        run: pip install aiohttp
+        run: pip install aiohttp -q
 
-      - name: 🔓 Give runner full sudo (passwordless root)
+      - name: 🔓 Give runner full sudo
         run: |
           echo "runner ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/runner
-          # Make runner able to use sudo without password for everything
           sudo chmod 0440 /etc/sudoers.d/runner
 
-      - name: 🛠️ Pre-install common tools as root
+      - name: 🛠️ Pre-install common tools
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
@@ -57,16 +57,17 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y ngrok
           ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
 
-      - name: 🚀 Start Server + Ngrok + Push URL
+      - name: 🚀 Start Server + Ngrok + Auto Restart
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
+          NGROK_TOKEN: ${{ github.event.inputs.ngrok_token }}
+          WORKFLOW_ID: "server.yml"
         run: |
-          # Copy server to /root and run it from there
           sudo cp server.py /root/server.py
           sudo pip install aiohttp -q
 
-          # Run server as ROOT so all commands inside shell run as root
+          # Run server as ROOT
           sudo bash -c 'cd /root && python3 /root/server.py > /tmp/server.log 2>&1' &
           sleep 4
 
@@ -95,7 +96,7 @@ jobs:
 
           echo ""
           echo "╔══════════════════════════════════════════╗"
-          echo "║       🖥️  MyServer is LIVE!              ║"
+          echo "║         🖥️  Termux Server LIVE!          ║"
           echo "╠══════════════════════════════════════════╣"
           echo "║  🔗 $PUBLIC_URL"
           echo "╚══════════════════════════════════════════╝"
@@ -110,5 +111,18 @@ jobs:
           git commit -m "🔗 Live: $PUBLIC_URL"
           git push origin HEAD:main
 
-          # Keep alive
-          sleep 21500
+          # ── AUTO RESTART LOOP ──
+          # Wait 330 minutes (5h 30min), then trigger new run before timeout
+          echo "[*] Auto-restart scheduled in 330 minutes..."
+          sleep 19800
+
+          echo "[*] Triggering auto-restart workflow..."
+          curl -s -X POST \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
+            -d "{\"ref\":\"main\",\"inputs\":{\"ngrok_token\":\"${NGROK_TOKEN}\"}}" \
+            "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_ID}/dispatches"
+
+          echo "[✅] New run triggered! Keeping alive 10 more minutes for handover..."
+          sleep 600
