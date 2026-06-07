@@ -32,16 +32,13 @@ jobs:
           sudo apt-get install -y -qq \
             curl wget git vim nano htop net-tools \
             python3 python3-pip python3-venv \
-            nodejs npm \
-            ffmpeg \
+            nodejs npm ffmpeg \
             zip unzip tar gzip \
-            nmap netcat-openbsd \
-            jq bc \
+            nmap netcat-openbsd jq bc \
             build-essential gcc g++ make \
-            sqlite3 screen tmux lsof tree \
-            rclone rsync
+            sqlite3 screen tmux lsof tree rsync
 
-      - name: 🐍 Setup Python
+      - name: 🐍 Setup Python + aiohttp
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -51,74 +48,67 @@ jobs:
 
       - name: 🌐 Install Ngrok
         run: |
-          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+          curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc \
+            | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+          echo "deb https://ngrok-agent.s3.amazonaws.com buster main" \
+            | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt-get update -qq && sudo apt-get install -y ngrok
           ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
 
-      - name: 💾 Restore saved state from repo
+      - name: 💾 Restore state from repo
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          sudo mkdir -p /root/workspace /root/uploads /tmp/.state
+          sudo mkdir -p /root/workspace /root/uploads
 
-          # Check if saved state archive exists in repo
-          STATE_EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \
+          # ── Restore workspace files ──
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${GH_TOKEN}" \
             "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64")
 
-          if [ "$STATE_EXISTS" = "200" ]; then
-            echo "[*] Found saved state — restoring..."
-
-            # Download and decode
-            curl -s \
-              -H "Authorization: token ${GH_TOKEN}" \
+          if [ "$HTTP" = "200" ]; then
+            echo "[*] Restoring workspace..."
+            curl -s -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github.v3.raw" \
               "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" \
-              -o /tmp/workspace.tar.gz.b64
-
-            base64 -d /tmp/workspace.tar.gz.b64 > /tmp/workspace.tar.gz
-            sudo tar -xzf /tmp/workspace.tar.gz -C / 2>/dev/null || true
-
-            echo "[✅] State restored!"
+              | base64 -d | sudo tar -xzf - -C / 2>/dev/null || true
+            echo "[✅] Workspace restored"
           else
-            echo "[*] No saved state found — fresh start"
+            echo "[*] No workspace state yet"
           fi
 
-          # Restore pip packages list if exists
-          PKG_EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \
+          # ── Restore pip packages ──
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${GH_TOKEN}" \
             "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt")
 
-          if [ "$PKG_EXISTS" = "200" ]; then
+          if [ "$HTTP" = "200" ]; then
             echo "[*] Restoring pip packages..."
-            curl -s \
-              -H "Authorization: token ${GH_TOKEN}" \
+            curl -s -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github.v3.raw" \
               "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" \
-              -o /tmp/pip_packages.txt
-            sudo pip install -r /tmp/pip_packages.txt -q 2>/dev/null || true
-            echo "[✅] Pip packages restored!"
+              -o /tmp/pip_pkgs.txt
+            sudo pip install -r /tmp/pip_pkgs.txt -q 2>/dev/null || true
+            echo "[✅] Pip packages restored"
           fi
 
-          # Restore apt packages list if exists
-          APT_EXISTS=$(curl -s -o /dev/null -w "%{http_code}" \
+          # ── Restore apt packages ──
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
             -H "Authorization: token ${GH_TOKEN}" \
             "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt")
 
-          if [ "$APT_EXISTS" = "200" ]; then
+          if [ "$HTTP" = "200" ]; then
             echo "[*] Restoring apt packages..."
-            curl -s \
-              -H "Authorization: token ${GH_TOKEN}" \
+            curl -s -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github.v3.raw" \
               "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" \
-              -o /tmp/apt_packages.txt
-            sudo apt-get install -y -qq $(cat /tmp/apt_packages.txt | tr '\n' ' ') 2>/dev/null || true
-            echo "[✅] Apt packages restored!"
+              -o /tmp/apt_pkgs.txt
+            xargs -a /tmp/apt_pkgs.txt sudo apt-get install -y -qq 2>/dev/null || true
+            echo "[✅] Apt packages restored"
           fi
 
-      - name: 🚀 Start Server + Ngrok + Persistence Loop
+      - name: 🚀 Run everything
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
@@ -128,156 +118,157 @@ jobs:
           sudo cp server.py /root/server.py
           sudo mkdir -p /root/workspace /root/uploads
 
-          # ── Write the save-state helper script ──
-          sudo tee /usr/local/bin/save-state > /dev/null << 'SAVESCRIPT'
-          #!/bin/bash
-          # Called periodically and before restart to persist files
-          GH_TOKEN="$1"
-          GITHUB_REPO="$2"
+          # ────────────────────────────────────────────────────
+          # save-state helper
+          # ────────────────────────────────────────────────────
+          sudo tee /usr/local/bin/save-state > /dev/null << 'EOF'
+#!/bin/bash
+GH_TOKEN="$1"; GITHUB_REPO="$2"
+[ -z "$GH_TOKEN" ] && exit 1
 
-          echo "[*] Saving state..."
+echo "[*] Saving state..."
 
-          # Save workspace files (max 90MB to fit GitHub file limit)
-          tar -czf /tmp/workspace.tar.gz \
-            /root/workspace /root/uploads /root/.bashrc /root/.bash_history \
-            --exclude='*.pyc' --exclude='__pycache__' \
-            --exclude='/root/workspace/node_modules' \
-            2>/dev/null || true
+# Workspace tar
+tar -czf /tmp/ws.tar.gz /root/workspace /root/uploads /root/.bashrc /root/.bash_history \
+  --exclude='*.pyc' --exclude='__pycache__' --exclude='node_modules' 2>/dev/null || true
 
-          SIZE=$(stat -c%s /tmp/workspace.tar.gz 2>/dev/null || echo 0)
-          if [ "$SIZE" -lt "94000000" ]; then
-            B64=$(base64 -w 0 /tmp/workspace.tar.gz)
+SZ=$(stat -c%s /tmp/ws.tar.gz 2>/dev/null || echo 99999999)
+if [ "$SZ" -lt "94000000" ]; then
+  B64=$(base64 -w 0 /tmp/ws.tar.gz)
+  SHA=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
+    "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" \
+    | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('sha',''))" 2>/dev/null)
+  BODY="{\"message\":\"save\",\"content\":\"${B64}\"}"
+  [ -n "$SHA" ] && BODY="{\"message\":\"save\",\"content\":\"${B64}\",\"sha\":\"${SHA}\"}"
+  curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" \
+    -H "Content-Type: application/json" -d "$BODY" \
+    "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" > /dev/null
+  echo "[✅] Workspace saved ($(( SZ/1024 ))KB)"
+else
+  echo "[!] Too large: ${SZ} bytes"
+fi
 
-            # Get current SHA if exists
-            SHA=$(curl -s \
-              -H "Authorization: token ${GH_TOKEN}" \
-              "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" \
-              | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
+# Pip
+pip freeze 2>/dev/null > /tmp/pip.txt || true
+PB64=$(base64 -w 0 /tmp/pip.txt)
+PSHA=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
+  "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('sha',''))" 2>/dev/null)
+PBODY="{\"message\":\"save pip\",\"content\":\"${PB64}\"}"
+[ -n "$PSHA" ] && PBODY="{\"message\":\"save pip\",\"content\":\"${PB64}\",\"sha\":\"${PSHA}\"}"
+curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" \
+  -H "Content-Type: application/json" -d "$PBODY" \
+  "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" > /dev/null
 
-            if [ -z "$SHA" ]; then
-              # Create new
-              curl -s -X PUT \
-                -H "Authorization: token ${GH_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "{\"message\":\"💾 Save state\",\"content\":\"${B64}\"}" \
-                "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" > /dev/null
-            else
-              # Update existing
-              curl -s -X PUT \
-                -H "Authorization: token ${GH_TOKEN}" \
-                -H "Content-Type: application/json" \
-                -d "{\"message\":\"💾 Save state\",\"content\":\"${B64}\",\"sha\":\"${SHA}\"}" \
-                "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" > /dev/null
-            fi
-            echo "[✅] Workspace saved ($(( SIZE / 1024 ))KB)"
-          else
-            echo "[!] Workspace too large to save (${SIZE} bytes)"
-          fi
+# Apt
+apt-mark showmanual 2>/dev/null > /tmp/apt.txt || true
+AB64=$(base64 -w 0 /tmp/apt.txt)
+ASHA=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
+  "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" \
+  | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('sha',''))" 2>/dev/null)
+ABODY="{\"message\":\"save apt\",\"content\":\"${AB64}\"}"
+[ -n "$ASHA" ] && ABODY="{\"message\":\"save apt\",\"content\":\"${AB64}\",\"sha\":\"${ASHA}\"}"
+curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" \
+  -H "Content-Type: application/json" -d "$ABODY" \
+  "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" > /dev/null
 
-          # Save pip packages
-          pip freeze 2>/dev/null | grep -v "^#" > /tmp/pip_packages.txt || true
-          PIP_B64=$(base64 -w 0 /tmp/pip_packages.txt)
-          PIP_SHA=$(curl -s \
-            -H "Authorization: token ${GH_TOKEN}" \
-            "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
-          if [ -z "$PIP_SHA" ]; then
-            curl -s -X PUT \
-              -H "Authorization: token ${GH_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\":\"💾 Save pip packages\",\"content\":\"${PIP_B64}\"}" \
-              "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" > /dev/null
-          else
-            curl -s -X PUT \
-              -H "Authorization: token ${GH_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\":\"💾 Save pip packages\",\"content\":\"${PIP_B64}\",\"sha\":\"${PIP_SHA}\"}" \
-              "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" > /dev/null
-          fi
-
-          # Save apt packages (manually installed)
-          apt-mark showmanual 2>/dev/null > /tmp/apt_packages.txt || true
-          APT_B64=$(base64 -w 0 /tmp/apt_packages.txt)
-          APT_SHA=$(curl -s \
-            -H "Authorization: token ${GH_TOKEN}" \
-            "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" \
-            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('sha',''))" 2>/dev/null || echo "")
-          if [ -z "$APT_SHA" ]; then
-            curl -s -X PUT \
-              -H "Authorization: token ${GH_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\":\"💾 Save apt packages\",\"content\":\"${APT_B64}\"}" \
-              "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" > /dev/null
-          else
-            curl -s -X PUT \
-              -H "Authorization: token ${GH_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "{\"message\":\"💾 Save apt packages\",\"content\":\"${APT_B64}\",\"sha\":\"${APT_SHA}\"}" \
-              "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" > /dev/null
-          fi
-
-          echo "[✅] State saved!"
-          SAVESCRIPT
+echo "[✅] All state saved!"
+EOF
           sudo chmod +x /usr/local/bin/save-state
 
-          # ── Write autorun manager ──
-          sudo tee /usr/local/bin/autorun > /dev/null << 'AUTORUN'
-          #!/bin/bash
-          # Usage: autorun add "python3 /root/workspace/bot.py"
-          #        autorun list
-          #        autorun remove 1
-          #        autorun run   (runs all)
-          LISTFILE="/tmp/.autorun_list"
-          touch "$LISTFILE"
-          case "$1" in
-            add)
-              echo "$2" >> "$LISTFILE"
-              echo "[+] Added: $2"
-              # Start it now too
-              nohup bash -c "$2" > "/tmp/autorun_$(echo $2 | md5sum | cut -c1-6).log" 2>&1 &
-              echo "[+] Started PID $!"
-              ;;
-            list)
-              echo "=== Autorun list ==="
-              cat -n "$LISTFILE"
-              ;;
-            remove)
-              sed -i "${2}d" "$LISTFILE"
-              echo "[+] Removed line $2"
-              ;;
-            run)
-              echo "[*] Running all autorun scripts..."
-              while IFS= read -r cmd; do
-                [ -z "$cmd" ] && continue
-                nohup bash -c "$cmd" > "/tmp/autorun_$(echo $cmd | md5sum | cut -c1-6).log" 2>&1 &
-                echo "[+] Started: $cmd (PID $!)"
-              done < "$LISTFILE"
-              ;;
-          esac
-          AUTORUN
+          # ────────────────────────────────────────────────────
+          # autorun manager — runs processes in SCREEN
+          # so they survive browser disconnect
+          # ────────────────────────────────────────────────────
+          sudo tee /usr/local/bin/autorun > /dev/null << 'EOF'
+#!/bin/bash
+# autorun add "python3 /root/workspace/bot.py"   — add & start now
+# autorun list                                    — show list
+# autorun remove 1                                — remove line N
+# autorun run                                     — start all (called on boot)
+# autorun stop "name"                             — kill screen session
+LIST="/tmp/.autorun_list"
+touch "$LIST"
+
+case "$1" in
+  add)
+    CMD="$2"
+    echo "$CMD" >> "$LIST"
+    # Give each process a screen session name based on index
+    IDX=$(wc -l < "$LIST")
+    SNAME="autorun_${IDX}"
+    screen -dmS "$SNAME" bash -c "$CMD"
+    echo "[+] Started in screen session: $SNAME"
+    echo "    cmd: $CMD"
+    echo "    attach: screen -r $SNAME"
+    ;;
+  list)
+    echo "=== Autorun processes ==="
+    i=1; while IFS= read -r cmd; do
+      [ -z "$cmd" ] && { i=$((i+1)); continue; }
+      SNAME="autorun_${i}"
+      RUNNING=$(screen -ls | grep "$SNAME" | wc -l)
+      STATUS=$( [ "$RUNNING" -gt 0 ] && echo "🟢 running" || echo "🔴 stopped" )
+      echo "  [$i] $STATUS — $cmd"
+      i=$((i+1))
+    done < "$LIST"
+    echo ""
+    screen -ls 2>/dev/null || true
+    ;;
+  remove)
+    sed -i "${2}d" "$LIST"
+    echo "[+] Removed line $2"
+    ;;
+  run)
+    echo "[*] Starting all autorun processes in screen..."
+    i=1; while IFS= read -r cmd; do
+      [ -z "$cmd" ] && { i=$((i+1)); continue; }
+      SNAME="autorun_${i}"
+      screen -dmS "$SNAME" bash -c "$cmd"
+      echo "[+] [$i] Started: $cmd (screen: $SNAME)"
+      i=$((i+1))
+    done < "$LIST"
+    ;;
+  stop)
+    screen -S "$2" -X quit 2>/dev/null && echo "[+] Stopped: $2" || echo "[-] Not found: $2"
+    ;;
+  *)
+    echo "Usage: autorun add|list|remove|run|stop"
+    ;;
+esac
+EOF
           sudo chmod +x /usr/local/bin/autorun
 
-          # ── Start autorun processes ──
+          # ── Start all autorun processes in screen ──
           autorun run 2>/dev/null || true
 
-          # ── Start server ──
-          sudo bash -c 'cd /root && python3 /root/server.py > /tmp/server.log 2>&1' &
+          # ── Start web server in screen (survives browser close) ──
+          sudo screen -dmS termux-server bash -c \
+            'cd /root && python3 /root/server.py > /tmp/server.log 2>&1'
           sleep 4
 
-          # ── Start ngrok ──
-          ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1 &
+          # Verify server started
+          if ! curl -s http://localhost:8080 > /dev/null; then
+            echo "❌ Server failed to start!"
+            cat /tmp/server.log
+            exit 1
+          fi
+
+          # ── Start ngrok in screen ──
+          screen -dmS termux-ngrok bash -c \
+            'ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1'
           sleep 10
 
+          # Get public URL
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
-          import sys, json
-          try:
-              data = json.load(sys.stdin)
-              for t in data.get('tunnels', []):
-                  if t.get('proto') == 'https':
-                      print(t['public_url'])
-                      break
-          except: pass
-          ")
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for t in data.get('tunnels', []):
+        if t.get('proto') == 'https':
+            print(t['public_url']); break
+except: pass
+")
 
           if [ -z "$PUBLIC_URL" ]; then
             echo "❌ No ngrok URL!"
@@ -292,8 +283,11 @@ jobs:
           echo "╠══════════════════════════════════════╣"
           echo "║  🔗 $PUBLIC_URL"
           echo "╚══════════════════════════════════════╝"
+          echo ""
+          echo "[screen sessions]"
+          screen -ls || true
 
-          # Push URL
+          # Push URL to repo
           git config user.email "bot@myserver.dev"
           git config user.name "MyServer Bot"
           git remote set-url origin https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPO}.git
@@ -304,27 +298,56 @@ jobs:
           git commit -m "🔗 Live: $PUBLIC_URL" || true
           git push origin HEAD:main || true
 
-          # ── MAIN LOOP: save state every 10 min, restart at 5h 30min ──
+          # ── MAIN LOOP: auto-save every 10min, restart at 5h30m ──
           ELAPSED=0
-          MAX=19800   # 5h 30min in seconds
-          SAVE_INTERVAL=600  # save every 10 min
+          MAX=19800      # 5h 30min
+          INTERVAL=600   # 10min
 
-          echo "[*] Main loop started. Auto-save every 10min. Restart at 5h30min."
+          echo "[*] Main loop: save every 10min, restart at 5h30min"
 
           while [ $ELAPSED -lt $MAX ]; do
-            sleep $SAVE_INTERVAL
-            ELAPSED=$(( ELAPSED + SAVE_INTERVAL ))
-            MINS=$(( ELAPSED / 60 ))
-            echo "[*] ${MINS}min elapsed — saving state..."
+            sleep $INTERVAL
+            ELAPSED=$(( ELAPSED + INTERVAL ))
+            echo "[$(date -u '+%H:%M')] ${ELAPSED}s elapsed — saving state..."
             save-state "${GH_TOKEN}" "${GITHUB_REPO}"
+
+            # Health check — restart ngrok if dead
+            if ! curl -s http://localhost:4040/api/tunnels | python3 -c "
+import sys,json
+d=json.load(sys.stdin)
+assert len(d.get('tunnels',[])) > 0
+" 2>/dev/null; then
+              echo "[!] Ngrok tunnel lost — restarting..."
+              screen -S termux-ngrok -X quit 2>/dev/null || true
+              sleep 2
+              screen -dmS termux-ngrok bash -c \
+                'ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1'
+              sleep 10
+              NEW_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
+import sys,json
+try:
+    d=json.load(sys.stdin)
+    for t in d.get('tunnels',[]):
+        if t.get('proto')=='https': print(t['public_url']); break
+except: pass
+")
+              if [ -n "$NEW_URL" ]; then
+                git pull origin main --rebase 2>/dev/null || true
+                echo "$NEW_URL" > SERVER_URL.txt
+                echo "Restarted: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> SERVER_URL.txt
+                git add SERVER_URL.txt
+                git commit -m "🔗 New URL: $NEW_URL" || true
+                git push origin HEAD:main || true
+                echo "[✅] New URL: $NEW_URL"
+              fi
+            fi
           done
 
-          # ── Final save before restart ──
-          echo "[*] Saving state before restart..."
+          # ── Final save + trigger new run ──
+          echo "[*] Final state save before restart..."
           save-state "${GH_TOKEN}" "${GITHUB_REPO}"
 
-          # ── Trigger next run ──
-          echo "[*] Triggering auto-restart..."
+          echo "[*] Triggering next run..."
           curl -s -X POST \
             -H "Authorization: token ${GH_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
@@ -332,5 +355,5 @@ jobs:
             -d "{\"ref\":\"main\",\"inputs\":{\"ngrok_token\":\"${NGROK_TOKEN}\"}}" \
             "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_ID}/dispatches"
 
-          echo "[✅] New run triggered! Keeping alive 5 min for handover..."
+          echo "[✅] New run triggered! Handover in 5min..."
           sleep 300
