@@ -7,6 +7,9 @@ on:
         description: 'Ngrok Auth Token'
         required: true
         type: string
+  push:
+    branches:
+      - run
 
 permissions:
   contents: write
@@ -19,6 +22,17 @@ jobs:
     steps:
       - name: 📥 Checkout
         uses: actions/checkout@v4
+
+      - name: 🔑 Get ngrok token
+        id: token
+        run: |
+          if [ -n "${{ github.event.inputs.ngrok_token }}" ]; then
+            echo "NGROK_TOKEN=${{ github.event.inputs.ngrok_token }}" >> $GITHUB_ENV
+          else
+            # Read from NGROK_TOKEN file in repo
+            TOKEN=$(cat NGROK_TOKEN.txt 2>/dev/null || echo "")
+            echo "NGROK_TOKEN=${TOKEN}" >> $GITHUB_ENV
+          fi
 
       - name: 🔓 Full sudo
         run: |
@@ -41,7 +55,7 @@ jobs:
           curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
           echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
           sudo apt-get update -qq && sudo apt-get install -y ngrok
-          ngrok config add-authtoken ${{ github.event.inputs.ngrok_token }}
+          ngrok config add-authtoken ${{ env.NGROK_TOKEN }}
 
       - name: 💾 Restore state
         env:
@@ -54,19 +68,20 @@ jobs:
               -H "Authorization: token ${GH_TOKEN}" \
               "https://api.github.com/repos/${GITHUB_REPO}/contents/state/${FILE}")
             if [ "$HTTP" = "200" ]; then
-              echo "[*] Restoring $FILE..."
               curl -s -H "Authorization: token ${GH_TOKEN}" \
                 -H "Accept: application/vnd.github.v3.raw" \
                 "https://api.github.com/repos/${GITHUB_REPO}/contents/state/${FILE}" \
                 -o /tmp/${FILE}
               if [[ "$FILE" == *.tar.gz.b64 ]]; then
                 base64 -d /tmp/${FILE} | sudo tar -xzf - -C / 2>/dev/null || true
+                echo "[✅] Workspace restored"
               elif [[ "$FILE" == pip_packages.txt ]]; then
                 sudo pip install -r /tmp/${FILE} -q 2>/dev/null || true
+                echo "[✅] Pip restored"
               elif [[ "$FILE" == apt_packages.txt ]]; then
                 xargs -a /tmp/${FILE} sudo apt-get install -y -qq 2>/dev/null || true
+                echo "[✅] Apt restored"
               fi
-              echo "[✅] $FILE restored"
             fi
           done
 
@@ -74,18 +89,16 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
-          NGROK_TOKEN: ${{ github.event.inputs.ngrok_token }}
+          NGROK_TOKEN: ${{ env.NGROK_TOKEN }}
           WORKFLOW_ID: "termux.yml"
         run: |
           sudo cp server.py /root/server.py
           sudo mkdir -p /root/workspace /root/uploads
 
-          # save-state script
           sudo tee /usr/local/bin/save-state > /dev/null << 'EOF'
 #!/bin/bash
 GH_TOKEN="$1"; GITHUB_REPO="$2"
 [ -z "$GH_TOKEN" ] && exit 1
-echo "[*] Saving..."
 tar -czf /tmp/ws.tar.gz /root/workspace /root/uploads /root/.bashrc /root/.bash_history \
   --exclude='*.pyc' --exclude='__pycache__' --exclude='node_modules' 2>/dev/null || true
 SZ=$(stat -c%s /tmp/ws.tar.gz 2>/dev/null || echo 99999999)
@@ -99,7 +112,7 @@ if [ "$SZ" -lt "94000000" ]; then
   curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" -H "Content-Type: application/json" \
     -d "$BODY" "https://api.github.com/repos/${GITHUB_REPO}/contents/state/workspace.tar.gz.b64" > /dev/null
 fi
-pip freeze 2>/dev/null > /tmp/pip.txt
+pip freeze 2>/dev/null > /tmp/pip.txt || true
 PB64=$(base64 -w 0 /tmp/pip.txt)
 PSHA=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
   "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" \
@@ -108,7 +121,7 @@ PBODY="{\"message\":\"save pip\",\"content\":\"${PB64}\"}"
 [ -n "$PSHA" ] && PBODY="{\"message\":\"save pip\",\"content\":\"${PB64}\",\"sha\":\"${PSHA}\"}"
 curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" -H "Content-Type: application/json" \
   -d "$PBODY" "https://api.github.com/repos/${GITHUB_REPO}/contents/state/pip_packages.txt" > /dev/null
-apt-mark showmanual 2>/dev/null > /tmp/apt.txt
+apt-mark showmanual 2>/dev/null > /tmp/apt.txt || true
 AB64=$(base64 -w 0 /tmp/apt.txt)
 ASHA=$(curl -s -H "Authorization: token ${GH_TOKEN}" \
   "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" \
@@ -117,11 +130,10 @@ ABODY="{\"message\":\"save apt\",\"content\":\"${AB64}\"}"
 [ -n "$ASHA" ] && ABODY="{\"message\":\"save apt\",\"content\":\"${AB64}\",\"sha\":\"${ASHA}\"}"
 curl -s -X PUT -H "Authorization: token ${GH_TOKEN}" -H "Content-Type: application/json" \
   -d "$ABODY" "https://api.github.com/repos/${GITHUB_REPO}/contents/state/apt_packages.txt" > /dev/null
-echo "[✅] State saved!"
+echo "[✅] Saved!"
 EOF
           sudo chmod +x /usr/local/bin/save-state
 
-          # autorun in screen
           sudo tee /usr/local/bin/autorun > /dev/null << 'EOF'
 #!/bin/bash
 LIST="/tmp/.autorun_list"
@@ -131,54 +143,33 @@ case "$1" in
     echo "$2" >> "$LIST"
     IDX=$(wc -l < "$LIST")
     screen -dmS "ar_${IDX}" bash -c "$2"
-    echo "[+] Started in screen ar_${IDX}: $2"
+    echo "[+] ar_${IDX}: $2"
     ;;
   list)
-    echo "=== Autorun ==="
     i=1; while IFS= read -r cmd; do
       [ -z "$cmd" ] && { i=$((i+1)); continue; }
-      RUN=$(screen -ls 2>/dev/null | grep -c "ar_${i}")
-      ST=$( [ "$RUN" -gt 0 ] && echo "🟢" || echo "🔴")
-      echo "  [$i] $ST $cmd"
-      i=$((i+1))
+      R=$(screen -ls 2>/dev/null | grep -c "ar_${i}"); S=$( [ "$R" -gt 0 ] && echo "🟢" || echo "🔴")
+      echo "[$i] $S $cmd"; i=$((i+1))
     done < "$LIST"
     ;;
-  remove)
-    sed -i "${2}d" "$LIST"
-    echo "[+] Removed $2"
-    ;;
+  remove) sed -i "${2}d" "$LIST"; echo "[+] Removed $2" ;;
   run)
     i=1; while IFS= read -r cmd; do
       [ -z "$cmd" ] && { i=$((i+1)); continue; }
-      screen -dmS "ar_${i}" bash -c "$cmd"
-      echo "[+] Started ar_${i}: $cmd"
-      i=$((i+1))
+      screen -dmS "ar_${i}" bash -c "$cmd"; echo "[+] ar_${i}: $cmd"; i=$((i+1))
     done < "$LIST"
     ;;
-  stop)
-    screen -S "$2" -X quit && echo "[+] Stopped $2"
-    ;;
+  stop) screen -S "$2" -X quit && echo "[+] Stopped $2" ;;
 esac
 EOF
           sudo chmod +x /usr/local/bin/autorun
-
-          # Start autorun processes
           autorun run 2>/dev/null || true
 
-          # Start server in screen (survives browser close)
-          sudo screen -dmS termux-server bash -c \
-            'cd /root && python3 /root/server.py > /tmp/server.log 2>&1'
+          sudo screen -dmS termux-server bash -c 'cd /root && python3 /root/server.py > /tmp/server.log 2>&1'
           sleep 5
+          curl -s http://localhost:8080 > /dev/null || { echo "❌ Server failed!"; cat /tmp/server.log; exit 1; }
 
-          if ! curl -s http://localhost:8080 > /dev/null; then
-            echo "❌ Server failed!"
-            cat /tmp/server.log
-            exit 1
-          fi
-
-          # Start ngrok in screen
-          screen -dmS termux-ngrok bash -c \
-            'ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1'
+          screen -dmS termux-ngrok bash -c 'ngrok http 8080 --log=stdout > /tmp/ngrok.log 2>&1'
           sleep 12
 
           PUBLIC_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
@@ -187,14 +178,14 @@ try:
     d=json.load(sys.stdin)
     for t in d.get('tunnels',[]):
         if t.get('proto')=='https': print(t['public_url']); break
-except: pass
-")
+except: pass")
           [ -z "$PUBLIC_URL" ] && { echo "❌ No URL!"; cat /tmp/ngrok.log; exit 1; }
 
-          echo ""; echo "╔══════════════════════════════════╗"
-          echo "║   🖥️  Termux Server LIVE!        ║"
-          echo "╠══════════════════════════════════╣"
-          echo "║  🔗 $PUBLIC_URL"; echo "╚══════════════════════════════════╝"
+          echo "╔══════════════════════════════════════╗"
+          echo "║   🖥️  Termux Server LIVE!            ║"
+          echo "╠══════════════════════════════════════╣"
+          echo "║  🔗 $PUBLIC_URL"
+          echo "╚══════════════════════════════════════╝"
           screen -ls || true
 
           git config user.email "bot@myserver.dev"
@@ -207,42 +198,36 @@ except: pass
           git push origin HEAD:main || true
 
           ELAPSED=0; MAX=19800; INTERVAL=600
-          echo "[*] Loop: save every 10min, restart at 5h30m"
           while [ $ELAPSED -lt $MAX ]; do
-            sleep $INTERVAL
-            ELAPSED=$(( ELAPSED + INTERVAL ))
-            echo "[$(date -u '+%H:%M')] Saving state..."
+            sleep $INTERVAL; ELAPSED=$(( ELAPSED + INTERVAL ))
+            echo "[$(date -u '+%H:%M')] Saving..."
             save-state "${GH_TOKEN}" "${GITHUB_REPO}"
-            # Health check ngrok
-            if ! curl -s http://localhost:4040/api/tunnels | python3 -c \
-              "import sys,json;d=json.load(sys.stdin);assert d.get('tunnels')" 2>/dev/null; then
-              echo "[!] Ngrok dead, restarting..."
+            curl -s http://localhost:4040/api/tunnels | python3 -c \
+              "import sys,json;d=json.load(sys.stdin);assert d.get('tunnels')" 2>/dev/null || {
               screen -S termux-ngrok -X quit 2>/dev/null; sleep 2
-              screen -dmS termux-ngrok bash -c 'ngrok http 8080 > /tmp/ngrok.log 2>&1'
-              sleep 12
-              NEW_URL=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
+              screen -dmS termux-ngrok bash -c 'ngrok http 8080 > /tmp/ngrok.log 2>&1'; sleep 12
+              NEW=$(curl -s http://localhost:4040/api/tunnels | python3 -c "
 import sys,json
 try:
     d=json.load(sys.stdin)
     for t in d.get('tunnels',[]):
         if t.get('proto')=='https': print(t['public_url']); break
 except: pass")
-              if [ -n "$NEW_URL" ]; then
+              [ -n "$NEW" ] && {
                 git pull origin main --rebase 2>/dev/null || true
-                echo "$NEW_URL" > SERVER_URL.txt
-                echo "Restarted: $(date -u '+%H:%M UTC')" >> SERVER_URL.txt
-                git add SERVER_URL.txt && git commit -m "🔗 $NEW_URL" || true
-                git push origin HEAD:main || true
-              fi
-            fi
+                echo "$NEW" > SERVER_URL.txt; git add SERVER_URL.txt
+                git commit -m "🔗 $NEW" || true; git push origin HEAD:main || true; }
+            }
           done
 
           save-state "${GH_TOKEN}" "${GITHUB_REPO}"
-          curl -s -X POST \
-            -H "Authorization: token ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            -H "Content-Type: application/json" \
-            -d "{\"ref\":\"main\",\"inputs\":{\"ngrok_token\":\"${NGROK_TOKEN}\"}}" \
-            "https://api.github.com/repos/${GITHUB_REPO}/actions/workflows/${WORKFLOW_ID}/dispatches"
-          echo "[✅] Next run triggered!"
+
+          # Trigger next run via push to 'run' branch
+          git checkout -b run 2>/dev/null || git checkout run 2>/dev/null || true
+          echo "$(date -u)" > .trigger
+          git add .trigger && git commit -m "🔄 auto-restart $(date -u)" || true
+          git push origin run --force || true
+          git checkout main 2>/dev/null || true
+
+          echo "[✅] Next run triggered via push!"
           sleep 300
