@@ -213,7 +213,6 @@ python3-serial
 python3-six
 python3-tz
 python3-venv
-rclone
 rpm
 rsync
 ruby-full
