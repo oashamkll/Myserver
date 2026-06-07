@@ -62,7 +62,6 @@ pyparsing==3.1.1
 pyparted==3.12.0
 pyrsistent==0.20.0
 pyserial==3.5
-pyTelegramBotAPI==4.34.0
 python-apt==2.7.7+ubuntu5.2
 python-dateutil==2.8.2
 python-debian==0.1.49+ubuntu2
@@ -78,7 +77,6 @@ six==1.16.0
 sos==4.10.2
 ssh-import-id==5.11
 systemd-python==235
-telebot==0.0.5
 Twisted==24.3.0
 typing_extensions==4.10.0
 ubuntu-pro-client==8001
