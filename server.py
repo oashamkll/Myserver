@@ -13,7 +13,6 @@ HTML = r"""<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-canvas@0.7.0/lib/xterm-addon-canvas.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/hack-font@3.3.0/build/web/hack.css"/>
 <style>
 /* ── RESET ── */
@@ -291,7 +290,7 @@ html,body{
 
 <script>
 'use strict';
-let ws=null, term=null, fit=null, canvasAddon=null, alive=false;
+let ws=null, term=null, fit=null, alive=false;
 let ctrlLatched=false;
 
 const dot     = document.getElementById('dot');
@@ -365,8 +364,6 @@ function initTerm(){
     convertEol: false,
     disableStdin: false,
     allowProposedApi: true,
-    /* GPU accelerated renderer */
-    rendererType: 'canvas',    /* canvas быстрее WebGL на мобилах */
     windowsMode: false,
     drawBoldTextInBrightColors: true,
     minimumContrastRatio: 1,
@@ -376,11 +373,6 @@ function initTerm(){
   fit=new FitAddon.FitAddon();
   term.loadAddon(fit);
 
-  /* Canvas renderer addon — ускоряет рендеринг */
-  try {
-    canvasAddon=new CanvasAddon.CanvasAddon();
-    term.loadAddon(canvasAddon);
-  } catch(e) {}
 
   try { term.loadAddon(new WebLinksAddon.WebLinksAddon()); } catch(e) {}
 
