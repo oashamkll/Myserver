@@ -19,7 +19,6 @@ HTML = r"""<!DOCTYPE html>
 html,body{width:100%;height:100%;background:#000;overflow:hidden;
   -webkit-text-size-adjust:100%;touch-action:manipulation}
 
-/* ── TOP BAR ── */
 .topbar{
   position:fixed;top:0;left:0;right:0;height:38px;
   background:#000;border-bottom:1px solid #111;
@@ -41,13 +40,11 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   -webkit-tap-highlight-color:transparent;touch-action:manipulation;line-height:1}
 .tb-btn:active{background:#111;color:#888}
 
-/* ── TERMINAL ── */
 #tw{position:fixed;top:38px;bottom:90px;left:0;right:0;background:#000;overflow:hidden}
 #tw .xterm{width:100%;height:100%;padding:3px 4px}
 #tw .xterm-viewport{overflow-y:hidden!important}
 #tw .xterm-screen{cursor:text}
 
-/* ── EXTRA KEYS BAR ── */
 .xkeys{
   position:fixed;bottom:46px;left:0;right:0;height:44px;
   background:#000;border-top:1px solid #111;
@@ -66,25 +63,18 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   user-select:none;-webkit-user-select:none;
 }
 .xk:active{background:#1a1a1a;color:#fff}
-
-/* CTRL sticky key */
-.xk.ctrl-btn{
-  color:#8be9fd;border-color:#1a2a2a;font-weight:700;
-  min-width:48px;letter-spacing:.5px;
-}
-/* When CTRL is latched — glows blue */
+.xk.ctrl-btn{color:#8be9fd;border-color:#1a2a2a;font-weight:700;min-width:48px}
 .xk.ctrl-btn.latched{
   background:#061a28;border-color:#8be9fd;color:#8be9fd;
   box-shadow:0 0 10px #8be9fd55;
   animation:ctrlpulse 1s infinite;
 }
 @keyframes ctrlpulse{0%,100%{box-shadow:0 0 6px #8be9fd44}50%{box-shadow:0 0 14px #8be9fd99}}
-
 .xk.c{color:#8be9fd;border-color:#1a2a2a}
 .xk.y{color:#f1fa8c;border-color:#2a2a1a}
 .xk.g{color:#50fa7b;border-color:#1a2a1a}
+.xk.p{color:#ff79c6;border-color:#2a1a2a}
 
-/* ── ACTION BAR ── */
 .abar{
   position:fixed;bottom:0;left:0;right:0;height:46px;
   background:#000;border-top:1px solid #111;
@@ -99,20 +89,16 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 }
 .ab:active{background:#1a1a1a;color:#ccc}
 .ab.r{color:#ff5555;border-color:#2a1111}
+.ab.p{color:#ff79c6;border-color:#2a1a2a}
 
-/* ── CTRL LATCH HINT (shown above keyboard when latched) ── */
 #ctrl-hint{
-  display:none;
-  position:fixed;bottom:90px;left:0;right:0;
+  display:none;position:fixed;bottom:90px;left:0;right:0;
   background:#061a28;border-top:1px solid #8be9fd;border-bottom:1px solid #8be9fd;
-  padding:6px 12px;z-index:150;
-  font-family:'Hack',monospace;font-size:12px;color:#8be9fd;
-  text-align:center;letter-spacing:.5px;
-  pointer-events:none;
+  padding:6px 12px;z-index:150;font-family:'Hack',monospace;
+  font-size:12px;color:#8be9fd;text-align:center;pointer-events:none;
 }
 #ctrl-hint.show{display:block}
 
-/* ── DISCONNECT OVERLAY ── */
 .ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);
   z-index:300;align-items:center;justify-content:center}
 .ov.show{display:flex}
@@ -128,7 +114,6 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div class="topbar">
   <span class="tb-logo">Termux</span>
   <span class="tb-badge">[1] bash</span>
@@ -139,35 +124,23 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   <button class="tb-btn" onclick="reconnect()">↺</button>
 </div>
 
-<!-- TERMINAL -->
 <div id="tw"></div>
 
-<!-- CTRL HINT BAR — appears above keyboard when CTRL is latched -->
-<div id="ctrl-hint">⌨ CTRL latched — now press any key on your keyboard…  (tap CTRL again to cancel)</div>
+<div id="ctrl-hint">⌨ CTRL зажат — нажми букву на клавиатуре… (ещё раз CTRL = отмена)</div>
 
-<!-- EXTRA KEYS -->
 <div class="xkeys">
-  <!--
-    CTRL button:
-    - Tap once  → latches (glows blue) → your next physical keypress becomes Ctrl+key
-    - Tap again → unlatches (cancel)
-  -->
   <span class="xk ctrl-btn" id="ctrl-btn" onclick="toggleCtrl()">CTRL</span>
-  <!-- arrows -->
   <span class="xk y" onclick="sr('\x1b[A')">▲</span>
   <span class="xk y" onclick="sr('\x1b[B')">▼</span>
   <span class="xk y" onclick="sr('\x1b[D')">◀</span>
   <span class="xk y" onclick="sr('\x1b[C')">▶</span>
-  <!-- nav -->
   <span class="xk y" onclick="sr('\t')">TAB</span>
   <span class="xk y" onclick="sr('\x1b[3~')">DEL</span>
   <span class="xk y" onclick="sr('\x01')">HOME</span>
   <span class="xk y" onclick="sr('\x05')">END</span>
-  <!-- quick ctrl shortcuts (always available) -->
   <span class="xk c" onclick="sk('c')">^C</span>
   <span class="xk c" onclick="sk('d')">^D</span>
   <span class="xk c" onclick="sk('z')">^Z</span>
-  <!-- symbols -->
   <span class="xk" onclick="sr('| ')">|</span>
   <span class="xk" onclick="sr('> ')">&gt;</span>
   <span class="xk" onclick="sr('&amp;&amp; ')">&amp;&amp;</span>
@@ -177,7 +150,6 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   <span class="xk" onclick="sr('-')"> - </span>
   <span class="xk" onclick="sr('.')"> . </span>
   <span class="xk" onclick="sr('_')"> _ </span>
-  <!-- commands -->
   <span class="xk g" onclick="sl('ls -la')">ls</span>
   <span class="xk g" onclick="sl('pwd')">pwd</span>
   <span class="xk g" onclick="sl('cd ~')">cd ~</span>
@@ -198,24 +170,22 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
   <span class="xk"  onclick="sr('chmod +x ')">chmod</span>
   <span class="xk"  onclick="sr('kill ')">kill</span>
   <span class="xk"  onclick="sr('screen -r ')">screen</span>
-  <span class="xk"  onclick="sr('nohup ')">nohup</span>
+  <span class="xk p" onclick="sl('help')">HELP</span>
 </div>
 
-<!-- ACTION BAR -->
 <div class="abar">
   <button class="ab" onclick="sl('ls -la')">FILES</button>
   <button class="ab" onclick="sl('screen -ls')">SCREEN</button>
   <button class="ab" onclick="sl('df -h && free -h')">SYS</button>
-  <button class="ab" onclick="sl('autorun list 2>/dev/null || echo no autorun')">AUTO</button>
+  <button class="ab" onclick="sl('autorun list 2>/dev/null || echo нет процессов')">AUTO</button>
   <button class="ab" onclick="sl('ip a 2>/dev/null | grep inet || ifconfig')">NET</button>
   <button class="ab r" onclick="sk('c')">KILL</button>
 </div>
 
-<!-- DISCONNECT OVERLAY -->
 <div class="ov" id="ov">
   <div class="ov-box">
     <h3>~ disconnected ~</h3>
-    <p>Connection lost.<br/>Server may be restarting…<br/>Tap to reconnect.</p>
+    <p>Соединение потеряно.<br/>Сервер может перезапускаться…<br/>Нажми для переподключения.</p>
     <button onclick="reconnect();closeOv()">↺ reconnect</button>
   </div>
 </div>
@@ -223,186 +193,286 @@ html,body{width:100%;height:100%;background:#000;overflow:hidden;
 <script>
 'use strict';
 let ws=null, term=null, fit=null, alive=false;
+let ctrlLatched=false;
 
-// ── CTRL LATCH STATE ──────────────────────────────────────────
-// ctrlLatched = true means: next key from physical keyboard → send as Ctrl+key
-let ctrlLatched = false;
+const dot=document.getElementById('dot');
+const stxt=document.getElementById('stext');
+const ctrlBtn=document.getElementById('ctrl-btn');
+const ctrlHint=document.getElementById('ctrl-hint');
 
-const dot     = document.getElementById('dot');
-const stxt    = document.getElementById('stext');
-const ctrlBtn = document.getElementById('ctrl-btn');
-const ctrlHint= document.getElementById('ctrl-hint');
+function setOk(m){dot.className='tb-dot';stxt.textContent=m;alive=true}
+function setOff(m){dot.className='tb-dot off';stxt.textContent=m;alive=false}
 
-function setOk(m) { dot.className='tb-dot';     stxt.textContent=m; alive=true;  }
-function setOff(m){ dot.className='tb-dot off'; stxt.textContent=m; alive=false; }
-
-function setCtrlLatched(on) {
-  ctrlLatched = on;
-  if (on) {
+function setCtrlLatched(on){
+  ctrlLatched=on;
+  if(on){
     ctrlBtn.classList.add('latched');
     ctrlHint.classList.add('show');
-    // Shift terminal up so hint is visible
-    document.getElementById('tw').style.bottom = '112px';
-  } else {
+    document.getElementById('tw').style.bottom='112px';
+  }else{
     ctrlBtn.classList.remove('latched');
     ctrlHint.classList.remove('show');
-    document.getElementById('tw').style.bottom = '';
-    setTimeout(doResize, 80);
+    document.getElementById('tw').style.bottom='';
+    setTimeout(doResize,80);
   }
 }
-
-function toggleCtrl() {
+function toggleCtrl(){
   setCtrlLatched(!ctrlLatched);
-  // Focus the xterm so physical keyboard events go there
-  term && term.focus();
+  term&&term.focus();
 }
 
-// ── INIT XTERM ────────────────────────────────────────────────
-function initTerm() {
-  if (term) { try { term.dispose(); } catch(e){} term = null; }
-
-  term = new Terminal({
-    theme: {
-      background:'#000000', foreground:'#f8f8f2',
-      cursor:'#50fa7b',     cursorAccent:'#000000',
+function initTerm(){
+  if(term){try{term.dispose()}catch(e){}; term=null}
+  term=new Terminal({
+    theme:{
+      background:'#000000',foreground:'#f8f8f2',
+      cursor:'#50fa7b',cursorAccent:'#000000',
       selectionBackground:'#44475a88',
       black:'#000000',   red:'#ff5555',
       green:'#50fa7b',   yellow:'#f1fa8c',
       blue:'#6272a4',    magenta:'#ff79c6',
       cyan:'#8be9fd',    white:'#bfbfbf',
-      brightBlack:'#4d4d4d',  brightRed:'#ff6e6e',
-      brightGreen:'#69ff94',  brightYellow:'#ffffa5',
-      brightBlue:'#d6acff',   brightMagenta:'#ff92df',
-      brightCyan:'#a4ffff',   brightWhite:'#ffffff',
+      brightBlack:'#4d4d4d',brightRed:'#ff6e6e',
+      brightGreen:'#69ff94',brightYellow:'#ffffa5',
+      brightBlue:'#d6acff',brightMagenta:'#ff92df',
+      brightCyan:'#a4ffff',brightWhite:'#ffffff',
     },
-    fontFamily: "'Hack','DejaVu Sans Mono','Courier New',monospace",
-    fontSize: 13, lineHeight: 1.18, letterSpacing: 0,
-    cursorBlink: true, cursorStyle: 'block',
-    scrollback: 10000, allowTransparency: false,
-    convertEol: false, disableStdin: false, allowProposedApi: true,
+    fontFamily:"'Hack','DejaVu Sans Mono','Courier New',monospace",
+    fontSize:13,lineHeight:1.18,letterSpacing:0,
+    cursorBlink:true,cursorStyle:'block',
+    scrollback:10000,allowTransparency:false,
+    convertEol:false,disableStdin:false,allowProposedApi:true,
   });
-
-  fit = new FitAddon.FitAddon();
+  fit=new FitAddon.FitAddon();
   term.loadAddon(fit);
-  try { term.loadAddon(new WebLinksAddon.WebLinksAddon()); } catch(e) {}
+  try{term.loadAddon(new WebLinksAddon.WebLinksAddon())}catch(e){}
   term.open(document.getElementById('tw'));
   doResize();
   term.focus();
 
-  // ── Key handler: intercept when CTRL is latched ──
-  term.onData(data => {
-    if (ctrlLatched) {
-      // xterm already converts physical Ctrl+A → '\x01' etc.
-      // So if user pressed e.g. physical 'a' while CTRL latched,
-      // xterm sends '\x61' (a). We convert it to Ctrl+a '\x01'.
-      // But if they pressed Ctrl+A on physical kb, xterm sends '\x01' directly.
-      let out = data;
-      // Only remap printable ASCII a-z / A-Z (xterm sends them as-is when no modifier)
-      if (data.length === 1) {
-        const code = data.charCodeAt(0);
-        // printable a-z (97-122) or A-Z (65-90) → convert to ctrl
-        if (code >= 65 && code <= 90) {
-          out = String.fromCharCode(code - 64);   // A→1, B→2...
-        } else if (code >= 97 && code <= 122) {
-          out = String.fromCharCode(code - 96);   // a→1, b→2...
-        }
-        // digits / symbols: send as-is (so user can type Ctrl+[ etc.)
+  term.onData(data=>{
+    if(ctrlLatched){
+      let out=data;
+      if(data.length===1){
+        const code=data.charCodeAt(0);
+        if(code>=65&&code<=90)       out=String.fromCharCode(code-64);
+        else if(code>=97&&code<=122) out=String.fromCharCode(code-96);
       }
-      setCtrlLatched(false); // unlatch after one key
+      setCtrlLatched(false);
       sr(out);
-      return; // don't fall through to normal send
+      return;
     }
-    // Normal send
-    if (ws && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'input', data }));
+    if(ws&&ws.readyState===WebSocket.OPEN)
+      ws.send(JSON.stringify({type:'input',data}));
   });
-
-  term.onResize(({ cols, rows }) => {
-    if (ws && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+  term.onResize(({cols,rows})=>{
+    if(ws&&ws.readyState===WebSocket.OPEN)
+      ws.send(JSON.stringify({type:'resize',cols,rows}));
   });
 }
 
-// ── WEBSOCKET ─────────────────────────────────────────────────
-function connect() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(proto + '//' + location.host + '/ws');
-  ws.onopen  = () => { setOk('root@ubuntu'); term.focus(); setTimeout(() => { doResize(); term.focus(); }, 250); };
-  ws.onmessage = e => term.write(e.data);
-  ws.onclose = () => {
+function connect(){
+  const proto=location.protocol==='https:'?'wss:':'ws:';
+  ws=new WebSocket(proto+'//'+location.host+'/ws');
+  ws.onopen=()=>{setOk('root@ubuntu');term.focus();setTimeout(()=>{doResize();term.focus()},250)};
+  ws.onmessage=e=>term.write(e.data);
+  ws.onclose=()=>{
     setOff('disconnected');
-    if (alive) {
-      term.write('\r\n\x1b[31m[!] connection lost\x1b[0m\r\n');
-      document.getElementById('ov').classList.add('show');
-    }
-    alive = false;
+    if(alive){term.write('\r\n\x1b[31m[!] соединение потеряно\x1b[0m\r\n');
+      document.getElementById('ov').classList.add('show')}
+    alive=false;
   };
-  ws.onerror = () => setOff('error');
+  ws.onerror=()=>setOff('error');
 }
-
-function reconnect() {
-  try { ws && ws.close(); } catch(e) {}
+function reconnect(){
+  try{ws&&ws.close()}catch(e){}
   setCtrlLatched(false);
   setOff('reconnecting…');
-  setTimeout(() => { initTerm(); connect(); }, 600);
+  setTimeout(()=>{initTerm();connect()},600);
 }
-function closeOv() { document.getElementById('ov').classList.remove('show'); }
+function closeOv(){document.getElementById('ov').classList.remove('show')}
 
-// ── HELPERS ───────────────────────────────────────────────────
-function sr(data) {
-  if (ws && ws.readyState === WebSocket.OPEN)
-    ws.send(JSON.stringify({ type: 'input', data }));
-  term && term.focus();
+function sr(data){
+  if(ws&&ws.readyState===WebSocket.OPEN)
+    ws.send(JSON.stringify({type:'input',data}));
+  term&&term.focus();
 }
-function sl(cmd) { sr(cmd + '\n'); }
-function sk(key) {
-  const m = { c:'\x03', d:'\x04', z:'\x1a', l:'\x0c',
-               a:'\x01', e:'\x05', u:'\x15', k:'\x0b' };
-  sr(m[key] || key);
+function sl(cmd){sr(cmd+'\n')}
+function sk(key){
+  const m={c:'\x03',d:'\x04',z:'\x1a',l:'\x0c',a:'\x01',e:'\x05',u:'\x15',k:'\x0b'};
+  sr(m[key]||key);
 }
 
-// ── RESIZE ────────────────────────────────────────────────────
-function doResize() {
-  try {
+function doResize(){
+  try{
     fit.fit();
-    if (ws && ws.readyState === WebSocket.OPEN)
-      ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-  } catch(e) {}
+    if(ws&&ws.readyState===WebSocket.OPEN)
+      ws.send(JSON.stringify({type:'resize',cols:term.cols,rows:term.rows}));
+  }catch(e){}
 }
-window.addEventListener('resize', doResize);
+window.addEventListener('resize',doResize);
 
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => {
-    const kb = window.innerHeight - window.visualViewport.height;
-    const tw = document.getElementById('tw');
-    const xk = document.querySelector('.xkeys');
-    const ab = document.querySelector('.abar');
-    const ch = document.getElementById('ctrl-hint');
-    if (kb > 80) {
-      ab.style.bottom  = kb + 'px';
-      xk.style.bottom  = (kb + 46) + 'px';
-      ch.style.bottom  = (kb + 90) + 'px';
-      tw.style.bottom  = ctrlLatched ? (kb + 112) + 'px' : (kb + 90) + 'px';
-    } else {
-      ab.style.bottom = xk.style.bottom = ch.style.bottom = '';
-      tw.style.bottom = ctrlLatched ? '112px' : '';
-    }
-    setTimeout(doResize, 120);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize',()=>{
+    const kb=window.innerHeight-window.visualViewport.height;
+    const tw=document.getElementById('tw');
+    const xk=document.querySelector('.xkeys');
+    const ab=document.querySelector('.abar');
+    const ch=document.getElementById('ctrl-hint');
+    if(kb>80){
+      ab.style.bottom=kb+'px';
+      xk.style.bottom=(kb+46)+'px';
+      ch.style.bottom=(kb+90)+'px';
+      tw.style.bottom=ctrlLatched?(kb+112)+'px':(kb+90)+'px';
+    }else{ab.style.bottom=xk.style.bottom=ch.style.bottom='';
+      tw.style.bottom=ctrlLatched?'112px':'';}
+    setTimeout(doResize,120);
   });
 }
 
-// Keepalive ping every 20s
-setInterval(() => {
-  if (ws && ws.readyState === WebSocket.OPEN)
-    ws.send(JSON.stringify({ type: 'ping' }));
-}, 20000);
+setInterval(()=>{
+  if(ws&&ws.readyState===WebSocket.OPEN)
+    ws.send(JSON.stringify({type:'ping'}));
+},20000);
 
-// ── BOOT ──────────────────────────────────────────────────────
 initTerm();
 connect();
 </script>
 </body>
 </html>
+"""
+
+# ── HELP TEXT (written to /usr/local/bin/help on server start) ──
+HELP_SCRIPT = r"""#!/bin/bash
+echo ""
+echo -e "\033[1;35m╔══════════════════════════════════════════════════════════╗\033[0m"
+echo -e "\033[1;35m║           🖥️  Termux WebShell — Справка                 ║\033[0m"
+echo -e "\033[1;35m╚══════════════════════════════════════════════════════════╝\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ АВТОЗАПУСК ПРОЦЕССОВ\033[0m"
+echo -e "\033[0;37m  Процессы запускаются в screen — живут даже после закрытия браузера.\033[0m"
+echo -e "\033[0;37m  При перезапуске сервера они стартуют автоматически.\033[0m"
+echo ""
+echo -e "\033[1;33m  Добавить процесс в автозапуск:\033[0m"
+echo -e "    \033[0;36mautorun add \"python3 /root/workspace/bot.py\"\033[0m"
+echo -e "    \033[0;36mautorun add \"node /root/workspace/server.js\"\033[0m"
+echo -e "    \033[0;36mautorun add \"bash /root/workspace/myscript.sh\"\033[0m"
+echo ""
+echo -e "\033[1;33m  Посмотреть список (🟢 = работает, 🔴 = остановлен):\033[0m"
+echo -e "    \033[0;36mautorun list\033[0m"
+echo ""
+echo -e "\033[1;33m  Удалить из автозапуска (по номеру из списка):\033[0m"
+echo -e "    \033[0;36mautorun remove 1\033[0m"
+echo ""
+echo -e "\033[1;33m  Остановить процесс:\033[0m"
+echo -e "    \033[0;36mautorun stop 1\033[0m"
+echo ""
+echo -e "\033[1;33m  Посмотреть логи процесса:\033[0m"
+echo -e "    \033[0;36mautorun log 1\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ РАБОТА С SCREEN (фоновые сессии)\033[0m"
+echo -e "\033[0;37m  screen позволяет запускать процессы которые не умрут при закрытии.\033[0m"
+echo ""
+echo -e "\033[1;33m  Список всех сессий:\033[0m"
+echo -e "    \033[0;36mscreen -ls\033[0m"
+echo ""
+echo -e "\033[1;33m  Подключиться к сессии:\033[0m"
+echo -e "    \033[0;36mscreen -r ar_1\033[0m"
+echo ""
+echo -e "\033[1;33m  Создать новую сессию вручную:\033[0m"
+echo -e "    \033[0;36mscreen -dmS mysession bash -c \"python3 bot.py\"\033[0m"
+echo ""
+echo -e "\033[1;33m  Отключиться от сессии (не убивая):\033[0m"
+echo -e "    \033[0;36mCtrl+A затем D\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ СОХРАНЕНИЕ ФАЙЛОВ\033[0m"
+echo -e "\033[0;37m  Файлы сохраняются автоматически каждые 10 минут в GitHub.\033[0m"
+echo -e "\033[0;37m  Клади все важные файлы в:\033[0m"
+echo -e "    \033[0;36m/root/workspace/\033[0m   — основная папка (сохраняется)"
+echo -e "    \033[0;36m/root/uploads/\033[0m     — загруженные файлы (сохраняется)"
+echo ""
+echo -e "\033[1;33m  Сохранить вручную прямо сейчас:\033[0m"
+echo -e "    \033[0;36msave-state\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ УСТАНОВКА ПАКЕТОВ\033[0m"
+echo ""
+echo -e "\033[1;33m  Python пакеты:\033[0m"
+echo -e "    \033[0;36mpip install aiogram requests flask\033[0m"
+echo ""
+echo -e "\033[1;33m  Системные пакеты:\033[0m"
+echo -e "    \033[0;36mapt install -y ffmpeg nmap\033[0m"
+echo ""
+echo -e "\033[0;37m  Все установленные пакеты запоминаются и восстанавливаются при перезапуске.\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ ПРИМЕР: ЗАПУСТИТЬ ТЕЛЕГРАМ БОТА\033[0m"
+echo ""
+echo -e "    \033[0;36mmkdir -p /root/workspace\033[0m"
+echo -e "    \033[0;36mnano /root/workspace/bot.py\033[0m         # написать бота"
+echo -e "    \033[0;36mpip install aiogram\033[0m                 # установить зависимости"
+echo -e "    \033[0;36mautorun add \"python3 /root/workspace/bot.py\"\033[0m"
+echo -e "    \033[0;37m# Бот запустится сразу и будет стартовать при каждом перезапуске\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ ПРИМЕР: ЗАПУСТИТЬ NODE.JS СЕРВЕР\033[0m"
+echo ""
+echo -e "    \033[0;36mmkdir -p /root/workspace && cd /root/workspace\033[0m"
+echo -e "    \033[0;36mnano app.js\033[0m"
+echo -e "    \033[0;36mautorun add \"node /root/workspace/app.js\"\033[0m"
+echo ""
+
+echo -e "\033[1;32m▶ СИСТЕМНЫЕ КОМАНДЫ\033[0m"
+echo ""
+echo -e "    \033[0;36mdf -h\033[0m              — место на диске"
+echo -e "    \033[0;36mfree -h\033[0m            — оперативная память"
+echo -e "    \033[0;36mps aux\033[0m             — все запущенные процессы"
+echo -e "    \033[0;36mhtop\033[0m               — интерактивный мониторинг"
+echo -e "    \033[0;36mkill <PID>\033[0m         — убить процесс по ID"
+echo -e "    \033[0;36muname -a\033[0m           — информация о системе"
+echo -e "    \033[0;36mip a\033[0m               — сетевые интерфейсы и IP"
+echo ""
+
+echo -e "\033[1;32m▶ ГОРЯЧИЕ КЛАВИШИ В БРАУЗЕРЕ\033[0m"
+echo ""
+echo -e "    \033[0;36mCTRL\033[0m (кнопка)     — зажать, затем нажать букву на клавиатуре"
+echo -e "    \033[0;36m^C\033[0m               — остановить текущий процесс"
+echo -e "    \033[0;36m^D\033[0m               — выход / конец ввода"
+echo -e "    \033[0;36m^Z\033[0m               — приостановить процесс"
+echo -e "    \033[0;36mTAB\033[0m              — автодополнение"
+echo -e "    \033[0;36m▲ ▼\033[0m              — история команд"
+echo ""
+
+echo -e "\033[1;35m══════════════════════════════════════════════════════════\033[0m"
+echo -e "\033[0;37m  Введи \033[0;36mhelp\033[0;37m в любой момент чтобы снова увидеть эту справку.\033[0m"
+echo -e "\033[1;35m══════════════════════════════════════════════════════════\033[0m"
+echo ""
+"""
+
+BASHRC_APPEND = """
+# ── Termux WebShell helpers ──
+export WORKSPACE=/root/workspace
+alias ll='ls -la --color=auto'
+alias la='ls -la --color=auto'
+alias ..='cd ..'
+alias cls='clear'
+
+# help command
+if [ -f /usr/local/bin/help ]; then
+  alias help='/usr/local/bin/help'
+fi
+
+# welcome message
+if [ -z "$TERMUX_WELCOMED" ]; then
+  export TERMUX_WELCOMED=1
+  echo ""
+  echo -e "\\033[1;32m  Termux WebShell готов к работе!\\033[0m"
+  echo -e "  Введи \\033[1;36mhelp\\033[0m для справки по всем возможностям."
+  echo ""
+fi
 """
 
 async def handle_index(request):
@@ -432,6 +502,23 @@ async def handle_ws(request):
     ws = web.WebSocketResponse(max_msg_size=16*1024*1024, heartbeat=30)
     await ws.prepare(request)
 
+    # Write help script and update bashrc on first connection
+    try:
+        with open('/usr/local/bin/help', 'w') as f:
+            f.write(HELP_SCRIPT)
+        os.chmod('/usr/local/bin/help', 0o755)
+    except Exception:
+        pass
+
+    try:
+        bashrc = '/root/.bashrc'
+        existing = open(bashrc).read() if os.path.exists(bashrc) else ''
+        if 'TERMUX_WELCOMED' not in existing:
+            with open(bashrc, 'a') as f:
+                f.write(BASHRC_APPEND)
+    except Exception:
+        pass
+
     while True:
         pid, fd = pty.fork()
         if pid == 0:
@@ -452,7 +539,7 @@ async def handle_ws(request):
             try: os.chdir('/root')
             except: pass
             try:
-                with open('/etc/hostname','w') as f: f.write('ubuntu\n')
+                with open('/etc/hostname', 'w') as f: f.write('ubuntu\n')
             except: pass
             os.execvpe('/bin/bash', ['/bin/bash', '--login'], env)
             os._exit(1)
