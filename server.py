@@ -372,7 +372,6 @@ async def handle_ws(request):
 
         if pid == 0:
             # Run bash as root in /root
-            os.setsid()
             env = {
                 'TERM': 'xterm-256color',
                 'SHELL': '/bin/bash',
@@ -457,3 +456,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
