@@ -50,7 +50,7 @@ jobs:
             build-essential gcc g++ make sqlite3 screen tmux lsof tree rsync
 
       - name: Install Python deps
-        run: sudo pip install aiohttp -q
+        run: sudo pip install -r requirements.txt -q
 
       - name: Install ngrok
         run: |
@@ -73,4 +73,6 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
           GITHUB_REPO: ${{ github.repository }}
           WORKFLOW_ID: termux.yml
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: bash scripts/run-server.sh

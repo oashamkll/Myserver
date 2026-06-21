@@ -6,8 +6,6 @@ import os
 import os
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    raise ValueError("Пожалуйста, установите переменную окружения OPENROUTER_API_KEY")
 
 MODELS = {
     "generator": "google/gemini-2.0-flash-exp:free",
@@ -16,6 +14,8 @@ MODELS = {
 }
 
 def ask_ai(model, prompt, context=""):
+    if not OPENROUTER_API_KEY:
+        return f"Error: OPENROUTER_API_KEY environment variable is not set. Please add it to your environment or GitHub Secrets."
     try:
         response = requests.post(
             url="https://openrouter.ai/api/v1/chat/completions",

@@ -2,6 +2,7 @@
 set -e
 
 sudo cp server.py /root/server.py
+sudo cp telegram_bot.py /root/telegram_bot.py
 sudo mkdir -p /root/workspace /root/uploads
 sudo cp scripts/save-state.sh /usr/local/bin/save-state
 sudo cp scripts/autorun.sh    /usr/local/bin/autorun
@@ -26,6 +27,21 @@ curl -sf http://localhost:8080 > /dev/null || {
   exit 1
 }
 echo "[OK] Server is up"
+
+# Start Telegram Bot in SCREEN if token is set
+if [ -n "$TELEGRAM_BOT_TOKEN" ]; then
+  echo "[*] Starting Telegram Bot..."
+  sudo screen -dmS telegram-bot bash -c \
+    'OPENROUTER_API_KEY="'"$OPENROUTER_API_KEY"'" TELEGRAM_BOT_TOKEN="'"$TELEGRAM_BOT_TOKEN"'" python3 /root/telegram_bot.py > /tmp/telegram_bot.log 2>&1'
+  sleep 2
+  if screen -ls | grep -q "telegram-bot"; then
+    echo "[OK] Telegram bot started successfully in screen 'telegram-bot'"
+  else
+    echo "[!] Failed to start Telegram bot! Check logs in /tmp/telegram_bot.log"
+  fi
+else
+  echo "[!] TELEGRAM_BOT_TOKEN is not set. Skipping Telegram Bot startup."
+fi
 
 # Start ngrok in SCREEN — tunnels to public URL
 screen -dmS termux-ngrok bash -c \
