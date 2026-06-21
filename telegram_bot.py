@@ -22,6 +22,17 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
+# Safe reply function to avoid crashing when message to be replied is not found
+def safe_reply(message, text, **kwargs):
+    try:
+        return bot.reply_to(message, text, **kwargs)
+    except Exception:
+        try:
+            return bot.send_message(message.chat.id, text, **kwargs)
+        except Exception as e:
+            print(f"[!] Error sending message to chat {message.chat.id}: {e}")
+            return None
+
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     help_text = (
@@ -35,11 +46,13 @@ def send_welcome(message):
         "🔹 `/help` — Показать эту справку\n\n"
         "_Пример:_ `Установи nginx и запусти его` или `Проверь загрузку процессора`"
     )
-    bot.reply_to(message, help_text, parse_mode='Markdown')
+    safe_reply(message, help_text, parse_mode='Markdown')
 
 @bot.message_handler(commands=['status'])
 def send_status(message):
-    status_msg = bot.reply_to(message, "⏳ Получаю информацию о системе...")
+    status_msg = safe_reply(message, "⏳ Получаю информацию о системе...")
+    if not status_msg:
+        return
     try:
         import subprocess
         df_output = subprocess.check_output("df -h / | tail -n 1", shell=True, text=True).strip()
@@ -60,10 +73,12 @@ def send_status(message):
 def execute_direct_cmd(message):
     cmd_text = message.text[5:].strip()
     if not cmd_text:
-        bot.reply_to(message, "❌ Пожалуйста, укажите команду. Пример: `/cmd ls -la`", parse_mode='Markdown')
+        safe_reply(message, "❌ Пожалуйста, укажите команду. Пример: `/cmd ls -la`", parse_mode='Markdown')
         return
         
-    status_msg = bot.reply_to(message, f"🏃‍♂️ Выполняю команду:\n`{cmd_text}`...", parse_mode='Markdown')
+    status_msg = safe_reply(message, f"🏃‍♂️ Выполняю команду:\n`{cmd_text}`...", parse_mode='Markdown')
+    if not status_msg:
+        return
     try:
         output = ai_council.execute_bash(cmd_text)
         # Handle long output by splitting or truncating
@@ -83,7 +98,7 @@ def execute_direct_cmd(message):
 def run_ai_task_cmd(message):
     goal = message.text[4:].strip()
     if not goal:
-        bot.reply_to(message, "❌ Пожалуйста, укажите задачу для ИИ. Пример: `/ai установи htop`", parse_mode='Markdown')
+        safe_reply(message, "❌ Пожалуйста, укажите задачу для ИИ. Пример: `/ai установи htop`", parse_mode='Markdown')
         return
     process_ai_task(message, goal)
 
@@ -94,7 +109,9 @@ def run_ai_task_default(message):
     process_ai_task(message, goal)
 
 def process_ai_task(message, goal):
-    status_msg = bot.reply_to(message, f"🧠 **Консилиум ИИ думает над вашей задачей:**\n_\"{goal}\"_\n\n⏳ Пожалуйста, подождите, это займет около 10-15 секунд...", parse_mode='Markdown')
+    status_msg = safe_reply(message, f"🧠 **Консилиум ИИ думает над вашей задачей:**\n_\"{goal}\"_\n\n⏳ Пожалуйста, подождите, это займет около 10-15 секунд...", parse_mode='Markdown')
+    if not status_msg:
+        return
     
     try:
         # Run the consensus task
