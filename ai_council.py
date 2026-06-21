@@ -5,6 +5,15 @@ import os
 
 import os
 
+# Load environment variables from .env file if it exists
+if os.path.exists(".env"):
+    with open(".env") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip()
+
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 MODELS = {

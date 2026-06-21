@@ -4,6 +4,15 @@ import sys
 import telebot
 import ai_council
 
+# Load environment variables from .env file if it exists
+if os.path.exists(".env"):
+    with open(".env") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ[key.strip()] = val.strip()
+
 # Get token from environment
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
