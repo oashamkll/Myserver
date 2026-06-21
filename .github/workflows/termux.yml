@@ -65,7 +65,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
-        run: bash scripts/restore-state.sh
+        run: bash scripts/restore-state.sh || echo "Restore failed but continuing..."
 
       - name: Run server
         env:
