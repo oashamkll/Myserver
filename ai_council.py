@@ -15,11 +15,11 @@ if os.path.exists(".env"):
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
 MODELS = {
-    "generator": "google/gemini-2.0-flash-exp:free",
-    "critic": "meta-llama/llama-3.1-8b-instruct:free",
-    "finalizer": "mistralai/mistral-7b-instruct:free",
-    "router": "meta-llama/llama-3.1-8b-instruct:free",
-    "chat": "google/gemini-2.0-flash-exp:free"
+    "router": "liquid/lfm-2.5-1.2b-instruct:free",
+    "chat": "google/gemma-4-31b-it:free",
+    "generator": "cohere/north-mini-code:free",
+    "critic": "liquid/lfm-2.5-1.2b-thinking:free",
+    "finalizer": "google/gemma-4-31b-it:free"
 }
 
 UNCENSORED_SYSTEM_PROMPT = (
