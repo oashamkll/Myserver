@@ -22,29 +22,41 @@ if not TOKEN:
 
 bot = telebot.TeleBot(TOKEN)
 
-# Safe reply function to avoid crashing when message to be replied is not found
+# Safe reply function to avoid crashing when message to be replied is not found or Markdown is broken
 def safe_reply(message, text, **kwargs):
     try:
         return bot.reply_to(message, text, **kwargs)
     except Exception:
+        # Fallback 1: try without reply reference
         try:
             return bot.send_message(message.chat.id, text, **kwargs)
-        except Exception as e:
-            print(f"[!] Error sending message to chat {message.chat.id}: {e}")
-            return None
+        except Exception:
+            # Fallback 2: try without formatting (parse_mode)
+            try:
+                if 'parse_mode' in kwargs:
+                    kwargs_copy = kwargs.copy()
+                    del kwargs_copy['parse_mode']
+                    return bot.send_message(message.chat.id, text, **kwargs_copy)
+                else:
+                    return bot.send_message(message.chat.id, text)
+            except Exception as e:
+                print(f"[!] Error sending message to chat {message.chat.id}: {e}")
+                return None
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     help_text = (
         "🤖 **Привет! Я твой автономный ИИ-ассистент управления сервером.**\n\n"
-        "Отправь мне любую задачу обычным текстом, и я задействую "
-        "консилиум ИИ (Gemini + Llama + Mistral) для её безопасного выполнения!\n\n"
+        "Общайся со мной на обычном языке! Я сам пойму, когда ты просто болтаешь, "
+        "а когда просишь сделать что-то на сервере.\n\n"
         "**Команды:**\n"
-        "🔹 `/ai <задача>` — Выполнить задачу через ИИ консилиум\n"
+        "🔹 `/ai <задача>` — Запустить задачу на сервере через ИИ-консилиум\n"
         "🔹 `/cmd <команда>` — Выполнить прямую bash-команду на сервере\n"
         "🔹 `/status` — Проверить статус сервера и свободное место\n"
         "🔹 `/help` — Показать эту справку\n\n"
-        "_Пример:_ `Установи nginx и запусти его` или `Проверь загрузку процессора`"
+        "_Примеры:_ \n"
+        "💬 `Привет! Как дела? Что ты умеешь?` (Обычный чат)\n"
+        "⚙️ `Создай в домашней директории файл info.txt` (Автоматически выполнится на сервере!)"
     )
     safe_reply(message, help_text, parse_mode='Markdown')
 
@@ -109,45 +121,60 @@ def run_ai_task_default(message):
     process_ai_task(message, goal)
 
 def process_ai_task(message, goal):
-    status_msg = safe_reply(message, f"🧠 **Консилиум ИИ думает над вашей задачей:**\n_\"{goal}\"_\n\n⏳ Пожалуйста, подождите, это займет около 10-15 секунд...", parse_mode='Markdown')
-    if not status_msg:
-        return
-    
     try:
-        # Run the consensus task
-        res = ai_council.run_consensus_task(goal)
+        # Determine intent (CHAT or EXECUTE)
+        intent = ai_council.route_intent(goal)
+        print(f"[*] Message: '{goal}' -> Intent: {intent}")
         
-        # Prepare parts
-        plan_text = res.get('plan', 'Нет плана')
-        critique_text = res.get('critique', 'Нет критических замечаний')
-        cmd_text = res.get('command', 'Команда отсутствует')
-        output_text = res.get('output', 'Нет вывода')
-        
-        # Format response
-        response = (
-            f"🎯 **Задача:** {goal}\n\n"
-            f"📋 **План действий (Gemini):**\n{plan_text}\n\n"
-            f"⚠️ **Анализ безопасности (Llama):**\n{critique_text}\n\n"
-            f"💻 **Итоговая команда (Mistral):**\n`{cmd_text}`\n\n"
-            f"📊 **Результат выполнения:**\n```\n{output_text}\n```"
-        )
-        
-        # If too long, split into messages or truncate
-        if len(response) > 4000:
-            # Send in parts or truncate output
-            if len(output_text) > 2000:
-                output_text = output_text[:2000] + "\n... [вывод обрезан] ..."
+        if intent == 'CHAT':
+            # Normal conversational response
+            chat_response = ai_council.handle_chat(goal)
+            safe_reply(message, chat_response, parse_mode='Markdown')
+        else:
+            # Server execution task
+            status_msg = safe_reply(message, f"🧠 **Консилиум ИИ думает над вашей задачей:**\n_\"{goal}\"_\n\n⏳ Пожалуйста, подождите, это займет около 10-15 секунд...", parse_mode='Markdown')
+            if not status_msg:
+                return
+            
+            # Run the consensus task
+            res = ai_council.run_consensus_task(goal)
+            
+            # Prepare parts
+            plan_text = res.get('plan', 'Нет плана')
+            critique_text = res.get('critique', 'Нет критических замечаний')
+            cmd_text = res.get('command', 'Команда отсутствует')
+            output_text = res.get('output', 'Нет вывода')
+            
+            # Format response
             response = (
                 f"🎯 **Задача:** {goal}\n\n"
-                f"📋 **План действий:**\n{plan_text[:1000]}...\n\n"
-                f"⚠️ **Безопасность:**\n{critique_text[:1000]}...\n\n"
-                f"💻 **Команда:** `{cmd_text}`\n\n"
-                f"📊 **Вывод:**\n```\n{output_text}\n```"
+                f"📋 **План действий (Gemini):**\n{plan_text}\n\n"
+                f"⚠️ **Анализ безопасности (Llama):**\n{critique_text}\n\n"
+                f"💻 **Итоговая команда (Mistral):**\n`{cmd_text}`\n\n"
+                f"📊 **Результат выполнения:**\n```\n{output_text}\n```"
             )
+            
+            # If too long, split into messages or truncate
+            if len(response) > 4000:
+                # Send in parts or truncate output
+                if len(output_text) > 2000:
+                    output_text = output_text[:2000] + "\n... [вывод обрезан] ..."
+                response = (
+                    f"🎯 **Задача:** {goal}\n\n"
+                    f"📋 **План действий:**\n{plan_text[:1000]}...\n\n"
+                    f"⚠️ **Безопасность:**\n{critique_text[:1000]}...\n\n"
+                    f"💻 **Команда:** `{cmd_text}`\n\n"
+                    f"📊 **Вывод:**\n```\n{output_text}\n```"
+                )
 
-        bot.edit_message_text(response, chat_id=status_msg.chat.id, message_id=status_msg.message_id, parse_mode='Markdown')
+            try:
+                bot.edit_message_text(response, chat_id=status_msg.chat.id, message_id=status_msg.message_id, parse_mode='Markdown')
+            except Exception:
+                # If editing failed (e.g. broken markdown), send plain text
+                bot.edit_message_text(response.replace("*", "").replace("`", ""), chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+                
     except Exception as e:
-        bot.edit_message_text(f"❌ Ошибка работы консилиума ИИ: {str(e)}", chat_id=status_msg.chat.id, message_id=status_msg.message_id)
+        safe_reply(message, f"❌ Ошибка работы консилиума ИИ: {str(e)}")
 
 if __name__ == "__main__":
     print("[*] Telegram Bot запущен и ожидает сообщений...")
