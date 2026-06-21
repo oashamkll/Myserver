@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 sudo mkdir -p /root/workspace /root/uploads
 echo "[*] Restoring state from GitHub..."
 
@@ -18,13 +17,13 @@ for FILE in workspace.tar.gz.b64 pip_packages.txt apt_packages.txt; do
 
   case "$FILE" in
     *.tar.gz.b64)
-      base64 -d "/tmp/${FILE}" | sudo tar -xzf - -C / 2>/dev/null && echo "[OK] Files restored"
+      base64 -d "/tmp/${FILE}" | sudo tar -xzf - -C / 2>/dev/null && echo "[OK] Files restored" || echo "[!] Failed to restore files"
       ;;
     pip_packages.txt)
-      sudo pip install -r "/tmp/${FILE}" -q 2>/dev/null && echo "[OK] Pip packages restored"
+      sudo pip install -r "/tmp/${FILE}" --break-system-packages --ignore-installed -q 2>/dev/null && echo "[OK] Pip packages restored" || echo "[!] Failed to restore pip packages"
       ;;
     apt_packages.txt)
-      xargs -a "/tmp/${FILE}" sudo apt-get install -y -qq 2>/dev/null && echo "[OK] Apt packages restored"
+      xargs -a "/tmp/${FILE}" sudo apt-get install -y -qq 2>/dev/null && echo "[OK] Apt packages restored" || echo "[!] Failed to restore apt packages"
       ;;
   esac
 done
